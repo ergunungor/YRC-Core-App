@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:yrc_core_app/screens/login_screen.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 void main() async {
   // Flutter motorunun tamamen hazır olduğundan emin oluyoruz
@@ -20,42 +22,13 @@ class YRCCoreApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: SupabaseTestEkrani(),
-    );
-  }
-}
-
-class SupabaseTestEkrani extends StatelessWidget {
-  const SupabaseTestEkrani({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('YRC Core - Gün 1 Testi'),
-        centerTitle: true,
+      // Fontu Montserrat olarak ayarlıyoruz
+      theme: ThemeData(
+        textTheme: GoogleFonts.montserratTextTheme(Theme.of(context).textTheme),
       ),
-      body: Center(
-        child: ElevatedButton(
-          onPressed: () async {
-            try {
-              // Veritabanındaki 'users' tablosuna gidip veri çekmeye çalışıyoruz
-              final data =
-                  await Supabase.instance.client.from('users').select();
-
-              // Sonucu Android Studio'nun altındaki 'Run' veya 'Debug Console' sekmesine yazdırıyoruz
-              // ignore: avoid_print
-              print('🎉 BAĞLANTI BAŞARILI! Supabase Cevabı: $data');
-            } catch (e) {
-              // ignore: avoid_print
-              print('❌ BAĞLANTI HATASI: $e');
-            }
-          },
-          child: const Text('Veritabanına Bağlan'),
-        ),
-      ),
+      home: const LoginScreen(),
     );
   }
 }
