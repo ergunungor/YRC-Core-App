@@ -4,6 +4,7 @@ import 'package:yrc_core_app/screens/home_screen.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart'; // Uygulamanın web'de mi mobilde mi olduğunu anlamamızı sağlar
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -173,7 +174,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () async {
                     const String clientId = '262903';
-                    final String redirectUri = Uri.base.origin;
+                    String redirectUri;
+                    if (kIsWeb) {
+                      redirectUri = Uri.base.origin; // Chrome/Web için
+                    } else {
+                      redirectUri =
+                          'yrccore://localhost'; // iOS ve Android için (Deep Link)
+                    }
                     const String scope =
                         'read,activity:read_all,profile:read_all';
 
