@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:yrc_core_app/screens/home_screen.dart';
@@ -5,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart'; // Uygulamanın web'de mi mobilde mi olduğunu anlamamızı sağlar
+import 'dart:async';
+import 'package:app_links/app_links.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,10 +18,38 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  late AppLinks _appLinks;
+  StreamSubscription<Uri>? _linkSubscription;
+
   @override
   void initState() {
     super.initState();
-    _checkStravaRedirect();
+    _initDeepLinks();
+  }
+
+  void _initDeepLinks() {
+    _appLinks = AppLinks();
+
+    // Uygulama açıkken gelen linkleri dinliyoruz
+    _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
+      print('SİSTEM: Uygulamaya şu linkle dönüldü: $uri');
+
+      // Linkin içinde Strava'nın verdiği 'code' var mı diye bakıyoruz
+      if (uri.queryParameters.containsKey('code')) {
+        final authCode = uri.queryParameters['code']!;
+
+        print('HARİKA! Strava kodu yakalandı: $authCode');
+
+        // Kodu yakaladığımıza göre, dünkü token takas fonksiyonumuzu çalıştırabiliriz!
+        _exchangeCodeForToken(authCode);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _linkSubscription?.cancel();
+    super.dispose();
   }
 
   void _checkStravaRedirect() {
@@ -75,6 +107,9 @@ class _LoginScreenState extends State<LoginScreen> {
           print('Supabase Kayıt Hatası: $dbError');
         }
         // ----------------------------------------------
+        if (!kIsWeb) {
+          closeInAppWebView();
+        }
 
         if (mounted) {
           Navigator.pushReplacement(
