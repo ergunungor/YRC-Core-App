@@ -1,91 +1,137 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/strava_service.dart'; // Dosya yolunun doğru olduğuna emin ol
+import 'package:curved_navigation_bar/curved_navigation_bar.dart';
+import 'profile_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _currentIndex = 1;
+
+  // Premium Vurgu Renkleri
+  final Color stravaOrange = const Color(0xFFFC4C02);
+  final Color nikeVolt = const Color(0xFFCEFF00);
+  final Color neonBlue = const Color(0xFF82B1F2);
+
+  final List<Widget> _screens = [
+    const Center(
+      child: Text(
+        'ETKİNLİKLER',
+        style: TextStyle(color: Colors.white, fontSize: 20),
+      ),
+    ),
+    const Center(
+      child: Text(
+        'LİDERLİK TABLOSU',
+        style: TextStyle(color: Colors.white, fontSize: 20),
+      ),
+    ),
+    const Center(
+      child: Text(
+        'AKTİVİTELERİM',
+        style: TextStyle(color: Colors.white, fontSize: 20),
+      ),
+    ),
+    const ProfileScreen(),
+  ];
+
+  Color getActiveColor() {
+    switch (_currentIndex) {
+      case 0:
+        return neonBlue;
+      case 1:
+        return stravaOrange;
+      case 2:
+        return nikeVolt;
+      case 3:
+        return Colors.white;
+      default:
+        return stravaOrange;
+    }
+  }
+
+  // İkonları ve "damlanın dışına taşan" parlama efektini oluşturan özel widget
+  Widget _buildNavItem(IconData icon, int index) {
+    bool isActive = _currentIndex == index;
+    Color activeColor = getActiveColor();
+
+    return Container(
+      // Genişliği artırıyoruz ki ışık damlanın (butonun) çeperini aşıp dışarı yayılsın
+      padding: const EdgeInsets.all(8.0),
+      decoration:
+          isActive
+              ? BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: activeColor.withOpacity(
+                      0.6,
+                    ), // Işığın opaklığını artırdık (Daha belirgin)
+                    blurRadius:
+                        30, // Işığın dışarıya doğru çok daha yumuşak ve geniş dağılması
+                    spreadRadius:
+                        8, // İŞTE SİHİR: Gölgenin kendi sınırından çıkıp damlayı aşmasını sağlar
+                  ),
+                ],
+              )
+              : const BoxDecoration(),
+      child: Icon(
+        icon,
+        size: 30, // İkonu da damlaya daha tok oturması için bir tık büyüttük
+        color: isActive ? const Color(0xFF050B14) : Colors.white54,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1A365D), // Tok gece mavisi arka plan
+      backgroundColor: const Color(0xFF050B14),
+      extendBody: true,
+
       appBar: AppBar(
-        title: const Text(
-          'YRC Core',
-          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2.0),
-        ),
-        centerTitle: true,
-        backgroundColor:
-            Colors.transparent, // AppBar'ı arka planla bütünleştiriyoruz
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.green.withValues(alpha: 0.1),
-              ),
-              child: const Icon(
-                Icons.check_circle_outline,
-                size: 80,
-                color: Colors.greenAccent,
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'İçeridesin!',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Strava verilerin buraya akacak.',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.white.withValues(alpha: 0.6),
-              ),
-            ),
-            Container(
-              margin: const EdgeInsets.only(top: 40),
-              child: ElevatedButton(
-                onPressed: () async {
-                  final supabase = Supabase.instance.client;
-                  final stravaService = StravaService();
-
-                  try {
-                    print('Veritabanından Token aranıyor...');
-
-                    // 1. VIP Anahtarı ve Kullanıcı ID'sini Supabase'den çek
-                    final userData =
-                        await supabase.from('users').select().limit(1).single();
-
-                    final accessToken = userData['access_token'];
-                    final stravaId = userData['strava_id'];
-
-                    print('Token bulundu! Strava API\'ye gidiliyor...');
-
-                    // 2. Servisi çalıştırıp son 7 günün koşularını iste
-                    await stravaService.syncRecentActivities(
-                      accessToken,
-                      stravaId,
-                    );
-                  } catch (e) {
-                    print('Veri çekme sırasında hata: $e');
-                  }
-                },
-                child: const Text('Strava Verilerini Getir'),
-              ),
-            ),
-          ],
+        centerTitle: true,
+        title: const Text(
+          'YRC CORE',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 4.0,
+            fontSize: 20,
+          ),
         ),
+      ),
+
+      body: _screens[_currentIndex],
+
+      bottomNavigationBar: CurvedNavigationBar(
+        index: _currentIndex,
+        height: 60,
+        backgroundColor: Colors.transparent,
+        color: const Color(0xFF0A121F),
+
+        buttonBackgroundColor: getActiveColor(),
+
+        animationDuration: const Duration(milliseconds: 300),
+        animationCurve: Curves.easeInOut,
+        onTap: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        items: [
+          // İkonları yeni oluşturduğumuz dışa parlayan fonksiyon ile çağırıyoruz
+          _buildNavItem(Icons.calendar_month, 0),
+          _buildNavItem(Icons.leaderboard_rounded, 1),
+          _buildNavItem(Icons.directions_run, 2),
+          _buildNavItem(Icons.person, 3),
+        ],
       ),
     );
   }
