@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math' as math;
+import '../widgets/shimmer_loading.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -29,6 +30,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   String _avgPace = '--:-- /km';
   String _totalDuration = '--s --d';
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -70,6 +72,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         if (mounted) {
           setState(() {
             _fullName = 'Kayıt Bulunamadı';
+            _isLoading = false;
           });
         }
         return;
@@ -132,10 +135,16 @@ class _ProfileScreenState extends State<ProfileScreen>
           _currentWeeklyKm = totalKm;
           _avgPace = '$calculatedPace /km';
           _totalDuration = '${hours}s ${mins}d';
+          _isLoading = false;
         });
       }
     } catch (e) {
       debugPrint('Veri çekilirken hata oluştu: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -255,6 +264,254 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  Widget _buildProfileShimmer() {
+    return ShimmerEffect(
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Avatar + isim satırı
+            Row(
+              children: [
+                const SkeletonBox(width: 60, height: 60, borderRadius: 30),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    SkeletonBox(width: 140, height: 18, borderRadius: 4),
+                    SizedBox(height: 8),
+                    SkeletonBox(width: 90, height: 14, borderRadius: 4),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 30),
+
+            // Yarım daire ilerleme göstergesinin yerini tutan oval kutu
+            const Center(
+              child: SkeletonBox(width: 240, height: 125, borderRadius: 62),
+            ),
+            const SizedBox(height: 40),
+
+            // İki satır halinde stat kartları (gerçek layoutla aynı yerleşim)
+            const Row(
+              children: [
+                Expanded(
+                  child: SkeletonBox(
+                    width: double.infinity,
+                    height: 96,
+                    borderRadius: 20,
+                  ),
+                ),
+                SizedBox(width: 16),
+                Expanded(
+                  child: SkeletonBox(
+                    width: double.infinity,
+                    height: 96,
+                    borderRadius: 20,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Row(
+              children: [
+                Expanded(
+                  child: SkeletonBox(
+                    width: double.infinity,
+                    height: 96,
+                    borderRadius: 20,
+                  ),
+                ),
+                SizedBox(width: 16),
+                Expanded(
+                  child: SkeletonBox(
+                    width: double.infinity,
+                    height: 96,
+                    borderRadius: 20,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Geniş kart (YRC Etkinlik Katılımı)
+            const SkeletonBox(
+              width: double.infinity,
+              height: 80,
+              borderRadius: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileContent(double progress) {
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 30,
+                backgroundColor: stravaOrange,
+                child: CircleAvatar(
+                  radius: 28,
+                  backgroundImage: NetworkImage(
+                    _avatarUrl.isNotEmpty
+                        ? _avatarUrl
+                        : 'https://ui-avatars.com/api/?name=${_fullName.replaceAll(' ', '+')}&background=FC4C02&color=fff',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _fullName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  Text(
+                    'YRC | Pacer',
+                    style: TextStyle(
+                      color: stravaOrange,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 30),
+
+          Center(
+            child: SizedBox(
+              width: 240,
+              height: 125,
+              child: CustomPaint(
+                painter: HalfCircleProgressPainter(
+                  progress: progress,
+                  progressColor: nikeVolt,
+                  backgroundColor: Colors.white.withAlpha(127),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 1.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text(
+                        'HAFTALIK HEDEF',
+                        style: TextStyle(
+                          color: Colors.white.withAlpha((127).round()),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2.0,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            _currentWeeklyKm.toStringAsFixed(1),
+                            style: TextStyle(
+                              color: nikeVolt,
+                              fontSize: 34,
+                              fontWeight: FontWeight.w900,
+                              shadows: [
+                                Shadow(
+                                  color: nikeVolt.withAlpha(
+                                    (0.4 * 255).round(),
+                                  ),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            ' / ${_weeklyGoal.toInt()} km',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 40),
+
+          Row(
+            children: [
+              _buildStatCard(
+                'BU HAFTA (TOPLAM)',
+                '${_currentWeeklyKm.toStringAsFixed(1)} km',
+                Icons.directions_run,
+                neonBlue,
+              ),
+              const SizedBox(width: 16),
+              _buildStatCard(
+                'BU HAFTA (YRC İLE)',
+                'Yakında', // <-- Placeholder eklendi
+                Icons.groups_rounded,
+                stravaOrange,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          Row(
+            children: [
+              _buildStatCard(
+                'ORT. PACE (1 HFT)',
+                _avgPace,
+                Icons.speed_rounded,
+                Colors.white,
+              ),
+              const SizedBox(width: 16),
+              _buildStatCard(
+                'SÜRE (1 HFT)',
+                _totalDuration,
+                Icons.timer_outlined,
+                nikeVolt,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          _buildWideStatCard(
+            'YRC ETKİNLİK KATILIMI',
+            'Çok Yakında', // <-- Placeholder eklendi
+            Icons.local_activity_rounded,
+            Colors.purpleAccent,
+          ),
+
+          const SizedBox(height: 40),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     double progress =
@@ -267,166 +524,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         color: nikeVolt,
         backgroundColor: cardColor,
         onRefresh: _onRefresh,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundColor: stravaOrange,
-                    child: CircleAvatar(
-                      radius: 28,
-                      backgroundImage: NetworkImage(
-                        _avatarUrl.isNotEmpty
-                            ? _avatarUrl
-                            : 'https://ui-avatars.com/api/?name=${_fullName.replaceAll(' ', '+')}&background=FC4C02&color=fff',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _fullName,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                      Text(
-                        'YRC | Pacer',
-                        style: TextStyle(
-                          color: stravaOrange,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 30),
-
-              Center(
-                child: SizedBox(
-                  width: 240,
-                  height: 125,
-                  child: CustomPaint(
-                    painter: HalfCircleProgressPainter(
-                      progress: progress,
-                      progressColor: nikeVolt,
-                      backgroundColor: Colors.white.withAlpha(127),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 1.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Text(
-                            'HAFTALIK HEDEF',
-                            style: TextStyle(
-                              color: Colors.white.withAlpha((127).round()),
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 2.0,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.baseline,
-                            textBaseline: TextBaseline.alphabetic,
-                            children: [
-                              Text(
-                                _currentWeeklyKm.toStringAsFixed(1),
-                                style: TextStyle(
-                                  color: nikeVolt,
-                                  fontSize: 34,
-                                  fontWeight: FontWeight.w900,
-                                  shadows: [
-                                    Shadow(
-                                      color: nikeVolt.withAlpha(
-                                        (0.4 * 255).round(),
-                                      ),
-                                      blurRadius: 10,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Text(
-                                ' / ${_weeklyGoal.toInt()} km',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 40),
-
-              Row(
-                children: [
-                  _buildStatCard(
-                    'BU HAFTA (TOPLAM)',
-                    '${_currentWeeklyKm.toStringAsFixed(1)} km',
-                    Icons.directions_run,
-                    neonBlue,
-                  ),
-                  const SizedBox(width: 16),
-                  _buildStatCard(
-                    'BU HAFTA (YRC İLE)',
-                    'Yakında', // <-- Placeholder eklendi
-                    Icons.groups_rounded,
-                    stravaOrange,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  _buildStatCard(
-                    'ORT. PACE (1 HFT)',
-                    _avgPace,
-                    Icons.speed_rounded,
-                    Colors.white,
-                  ),
-                  const SizedBox(width: 16),
-                  _buildStatCard(
-                    'SÜRE (1 HFT)',
-                    _totalDuration,
-                    Icons.timer_outlined,
-                    nikeVolt,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              _buildWideStatCard(
-                'YRC ETKİNLİK KATILIMI',
-                'Çok Yakında', // <-- Placeholder eklendi
-                Icons.local_activity_rounded,
-                Colors.purpleAccent,
-              ),
-
-              const SizedBox(height: 40),
-            ],
-          ),
-        ),
+        child:
+            _isLoading
+                ? _buildProfileShimmer()
+                : _buildProfileContent(progress),
       ),
     );
   }

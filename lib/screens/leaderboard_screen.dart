@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:ui';
+import '../widgets/shimmer_loading.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 
 enum LeaderboardState { loading, loaded, empty, error }
 
@@ -207,28 +209,31 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     return Scaffold(
       backgroundColor: mainBgColor,
       body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 16),
-            const Text(
-              'LİDERLİK TABLOSU',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.2,
+        child: ResponsiveLayout(
+          // <-- Responsive kısıtlayıcı burada
+          child: Column(
+            children: [
+              const SizedBox(height: 16),
+              const Text(
+                'LİDERLİK TABLOSU',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.2,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            _buildModernSegmentedControl(),
-            const SizedBox(height: 8),
-            Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                child: _buildStateBody(),
+              const SizedBox(height: 16),
+              _buildModernSegmentedControl(),
+              const SizedBox(height: 8),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  child: _buildStateBody(),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -260,7 +265,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   borderRadius: BorderRadius.circular(18),
                   boxShadow: [
                     BoxShadow(
-                      color: neonBlue.withOpacity(0.4),
+                      color: neonBlue.withAlpha((0.4 * 255).round()),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -290,7 +295,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           child: Text(
             title,
             style: TextStyle(
-              color: isActive ? mainBgColor : Colors.white.withOpacity(0.6),
+              color:
+                  isActive
+                      ? mainBgColor
+                      : Colors.white.withAlpha((0.6 * 255).round()),
               fontSize: 12,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.5,
@@ -304,7 +312,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   Widget _buildStateBody() {
     switch (_currentState) {
       case LeaderboardState.loading:
-        return Center(child: CircularProgressIndicator(color: neonBlue));
+        return _buildLoadingState();
       case LeaderboardState.empty:
         return _buildEmptyState();
       case LeaderboardState.error:
@@ -323,6 +331,56 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     }
   }
 
+  Widget _buildLoadingState() {
+    // Gerçek kartların yerini tutacak 6 tane iskelet kart üretiyoruz.
+    // 6 sayısı rastgele değil: ekranda genelde bu kadar kart sığıyor,
+    // gerçek veriden az önce göründüğü boşluğu doğru şekilde kaplıyor.
+    return ShimmerEffect(
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        itemCount: 6,
+        itemBuilder: (context, index) => _buildSkeletonCard(),
+      ),
+    );
+  }
+
+  Widget _buildSkeletonCard() {
+    // DİKKAT: Bu kutuların boyutları _buildRunnerCard'daki gerçek
+    // elemanlarla (rank, avatar, isim, mesafe) kabaca eşleşiyor.
+    // Amaç: iskelet kaybolup gerçek veri gelince sayfa "zıplamasın".
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      decoration: BoxDecoration(
+        color: cardBgColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          const SkeletonBox(width: 20, height: 16, borderRadius: 4), // rank
+          const SizedBox(width: 12),
+          const SkeletonBox(width: 40, height: 40, borderRadius: 20), // avatar
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                SkeletonBox(width: 120, height: 14, borderRadius: 4), // isim
+                SizedBox(height: 8),
+                SkeletonBox(
+                  width: 90,
+                  height: 10,
+                  borderRadius: 4,
+                ), // koşu/pace
+              ],
+            ),
+          ),
+          const SkeletonBox(width: 40, height: 18, borderRadius: 4), // mesafe
+        ],
+      ),
+    );
+  }
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -331,13 +389,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           Icon(
             Icons.directions_run_outlined,
             size: 48,
-            color: Colors.white.withOpacity(0.2),
+            color: Colors.white.withAlpha((0.2 * 255).round()),
           ),
           const SizedBox(height: 16),
           Text(
             'Henüz Koşan Yok',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.5),
+              color: Colors.white.withAlpha((0.5 * 255).round()),
               fontSize: 15,
               fontWeight: FontWeight.bold,
             ),
@@ -362,56 +420,68 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           color: neonBlue,
           backgroundColor: cardBgColor,
           onRefresh: _fetchLeaderboardData,
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics(),
-            ),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
+          child: AnimationLimiter(
+            // <-- Animasyon sınırı
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                      left: 24,
+                      right: 24,
+                      top: 16,
+                      bottom: 8,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '$_totalParticipants Koşucu',
+                          style: TextStyle(
+                            color: Colors.white.withAlpha((0.6 * 255).round()),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          'Toplam ${_totalClubDistance.toStringAsFixed(1)} km',
+                          style: TextStyle(
+                            color: Colors.white.withAlpha((0.6 * 255).round()),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SliverPadding(
                   padding: const EdgeInsets.only(
-                    left: 24,
-                    right: 24,
-                    top: 16,
-                    bottom: 8,
+                    left: 16,
+                    right: 16,
+                    bottom: 100,
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '$_totalParticipants Koşucu',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.6),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => AnimationConfiguration.staggeredList(
+                        position: index,
+                        duration: const Duration(milliseconds: 400),
+                        child: SlideAnimation(
+                          verticalOffset: 50.0,
+                          child: FadeInAnimation(
+                            child: _buildRunnerCard(_runners[index]),
+                          ),
                         ),
                       ),
-                      Text(
-                        'Toplam ${_totalClubDistance.toStringAsFixed(1)} km',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.6),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+                      childCount: _runners.length,
+                    ),
                   ),
                 ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  bottom: 100,
-                ),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) => _buildRunnerCard(_runners[index]),
-                    childCount: _runners.length,
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         if (currentUser != null)
@@ -426,49 +496,86 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 
   Widget _buildRunnerCard(RunnerRank runner) {
+    // 1. ADIM: Sıralamaya göre renk ve madalya ikonunu belirliyoruz
     Color rankColor;
-    if (runner.rank == 1)
+    IconData? medalIcon;
+    if (runner.rank == 1) {
       rankColor = goldColor;
-    else if (runner.rank == 2)
+      medalIcon = Icons.emoji_events_rounded;
+    } else if (runner.rank == 2) {
       rankColor = silverColor;
-    else if (runner.rank == 3)
+      medalIcon = Icons.military_tech_rounded;
+    } else if (runner.rank == 3) {
       rankColor = bronzeColor;
-    else
+      medalIcon = Icons.military_tech_rounded;
+    } else {
       rankColor = Colors.transparent;
+      medalIcon = null;
+    }
 
-    Color bgColor =
-        runner.isCurrentUser ? neonBlue.withOpacity(0.08) : cardBgColor;
+    bool isTop3 = runner.isTop3;
+
+    // 2. ADIM: Kart arka planını duruma göre seçiyoruz.
+    // Neden ayrı bir BoxDecoration değişkeni? Çünkü hem "sen"i (currentUser)
+    // hem top3'ü hem de normal satırları aynı Container'da yönetmemiz lazım,
+    // if-else'i widget ağacının içine gömmek yerine önce karar veriyoruz.
+    BoxDecoration cardDecoration;
+    if (runner.isCurrentUser) {
+      cardDecoration = BoxDecoration(
+        color: neonBlue.withAlpha((0.08 * 255).round()),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: neonBlue.withAlpha((0.4 * 255).round()),
+          width: 1.0,
+        ),
+      );
+    } else if (isTop3) {
+      cardDecoration = BoxDecoration(
+        gradient: LinearGradient(
+          colors: [rankColor.withAlpha((0.14 * 255).round()), cardBgColor],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: rankColor.withAlpha((0.6 * 255).round()),
+          width: 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: rankColor.withAlpha((0.18 * 255).round()),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      );
+    } else {
+      cardDecoration = BoxDecoration(
+        color: cardBgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withAlpha((0.03 * 255).round()),
+          width: 1.0,
+        ),
+      );
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(16),
-        border:
-            runner.isTop3
-                ? Border.all(color: rankColor.withOpacity(0.6), width: 1.0)
-                : Border.all(color: Colors.white.withOpacity(0.03), width: 1.0),
-      ),
+      decoration: cardDecoration,
       child: Row(
         children: [
           SizedBox(
             width: 28,
             child: Center(
               child:
-                  runner.rank == 1
-                      ? Icon(
-                        Icons.emoji_events_rounded,
-                        color: rankColor,
-                        size: 22,
-                      )
+                  medalIcon != null
+                      ? Icon(medalIcon, color: rankColor, size: 22)
                       : Text(
                         '${runner.rank}',
                         style: TextStyle(
-                          color:
-                              runner.isTop3
-                                  ? rankColor
-                                  : Colors.white.withOpacity(0.4),
+                          color: Colors.white.withAlpha((0.4 * 255).round()),
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
                         ),
@@ -476,12 +583,28 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: Colors.transparent,
-            backgroundImage: NetworkImage(runner.avatarUrl),
+
+          // 3. ADIM: Avatarın etrafına top3 için renkli bir halka (ring) koyuyoruz.
+          // Mantık: CircleAvatar'ı bir Container'a sarıp, o Container'a
+          // "shape: BoxShape.circle" + "border" veriyoruz. Container avatardan
+          // biraz büyük olduğu için border, avatarın dışında bir çember gibi görünür.
+          Container(
+            padding: EdgeInsets.all(isTop3 ? 2 : 0),
+            decoration:
+                isTop3
+                    ? BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: rankColor, width: 2),
+                    )
+                    : null,
+            child: CircleAvatar(
+              radius: isTop3 ? 21 : 20,
+              backgroundColor: Colors.transparent,
+              backgroundImage: NetworkImage(runner.avatarUrl),
+            ),
           ),
           const SizedBox(width: 12),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -520,7 +643,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 Text(
                   '• ${runner.runsCount} Koşu   • ${runner.avgPace}/km',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
+                    color: Colors.white.withAlpha((0.5 * 255).round()),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -539,7 +662,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   Text(
                     runner.distanceKm.toStringAsFixed(1),
                     style: TextStyle(
-                      color: runner.isTop3 ? rankColor : Colors.white,
+                      color: isTop3 ? rankColor : Colors.white,
                       fontSize: 20,
                       fontWeight: FontWeight.w900,
                     ),
@@ -548,7 +671,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   Text(
                     'km',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
+                      color: Colors.white.withAlpha((0.5 * 255).round()),
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -559,7 +682,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 Text(
                   '-${runner.distanceToNext.toStringAsFixed(1)} km',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.3),
+                    color: Colors.white.withAlpha((0.5 * 255).round()),
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
                   ),
@@ -579,9 +702,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
           decoration: BoxDecoration(
-            color: neonBlue.withOpacity(0.15),
+            color: neonBlue.withAlpha((0.15 * 255).round()),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: neonBlue.withOpacity(0.5), width: 1.5),
+            border: Border.all(
+              color: neonBlue.withAlpha((0.5 * 255).round()),
+              width: 1.5,
+            ),
           ),
           child: Row(
             children: [
@@ -631,7 +757,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   Text(
                     'km',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
+                      color: Colors.white.withAlpha((0.8 * 255).round()),
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -641,6 +767,21 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class ResponsiveLayout extends StatelessWidget {
+  final Widget child;
+  const ResponsiveLayout({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500), // Max 500px genişlik
+        child: child,
       ),
     );
   }
