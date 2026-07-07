@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math' as math;
 import '../widgets/shimmer_loading.dart';
+import '../services/strava_service.dart'; // Kendi dosya yoluna göre düzenle
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -149,7 +150,36 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Future<void> _syncStravaDataSilent() async {
-    // Strava API'den arka planda son koşuları getiren kod
+    try {
+      final supabase = Supabase.instance.client;
+
+      // Kullanıcının Strava ID'sini ve Access Token'ını veritabanından (veya nerede tutuyorsan oradan) çekiyoruz
+      final userData =
+          await supabase
+              .from('users')
+              .select(
+                'strava_id, access_token',
+              ) // access_token sütununun adını kendi DB'ne göre düzelt
+              .limit(1)
+              .maybeSingle();
+
+      if (userData != null &&
+          userData['strava_id'] != null &&
+          userData['access_token'] != null) {
+        final myStravaId = userData['strava_id'];
+        final myAccessToken = userData['access_token'];
+
+        // Kontağı çeviriyoruz! Az önce yazdığımız filtreli motor çalışıyor
+        final stravaService = StravaService();
+        await stravaService.syncRecentActivities(myAccessToken, myStravaId);
+
+        debugPrint('Arka plan senkronizasyonu tamamlandı.');
+      } else {
+        debugPrint('Token veya Strava ID eksik, senkronizasyon yapılamadı.');
+      }
+    } catch (e) {
+      debugPrint('Sessiz senkronizasyon sırasında hata: $e');
+    }
   }
 
   Future<void> _onRefresh() async {

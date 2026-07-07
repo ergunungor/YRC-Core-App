@@ -52,18 +52,6 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _checkStravaRedirect() {
-    final uri = Uri.base;
-
-    if (uri.queryParameters.containsKey('code')) {
-      final authCode = uri.queryParameters['code']!;
-      print('Strava Yetki Kodu Yakalandı, takas ediliyor: $authCode');
-
-      // Yakaladığımız kodu token'lara çevirmek için fonksiyona gönderiyoruz
-      _exchangeCodeForToken(authCode);
-    }
-  }
-
   Future<void> _exchangeCodeForToken(String authCode) async {
     const String clientId = '262903';
     const String clientSecret =

@@ -15,7 +15,7 @@ class StravaService {
     final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
     final epochTime = sevenDaysAgo.millisecondsSinceEpoch ~/ 1000;
 
-    // 2. Strava API İstek Adresi (after parametresi ile sadece bu tarihten sonrasını istiyoruz)
+    // 2. Strava API İstek Adresi
     final url = Uri.parse(
       'https://www.strava.com/api/v3/athlete/activities?after=$epochTime',
     );
@@ -33,8 +33,19 @@ class StravaService {
           'BİNGO! Son 7 güne ait ${activities.length} adet aktivite başarıyla çekildi.',
         );
 
-        // Çekilen her bir aktiviteyi döngüye alıp veritabanına işliyoruz
+        int addedRunsCount = 0; // Sadece eklenen koşuları saymak için
+
+        // 4. Çekilen her bir aktiviteyi döngüye alıp veritabanına işliyoruz
         for (var activity in activities) {
+          // 🚀 KRİTİK FİLTRE: Sadece koşuları kabul et!
+          final String activityType = activity['type'] ?? 'Unknown';
+          if (activityType != 'Run') {
+            print(
+              'Filtrelendi: "${activity['name']}" bir koşu değil ($activityType). Atlanıyor...',
+            );
+            continue; // Bu komut aşağıdaki kodları okumadan doğrudan bir sonraki aktiviteye geçer.
+          }
+
           // Strava koordinatları [enlem, boylam] şeklinde bir dizi olarak verir, bunu parçalıyoruz
           final latLng = activity['start_latlng'] as List<dynamic>?;
           final startLat =
@@ -46,8 +57,8 @@ class StravaService {
           final activityData = {
             'activity_id': activity['id'],
             'strava_id': stravaId,
-            'name': activity['name'], // Eklenen sütun
-            'moving_time': activity['moving_time'], // Eklenen sütun
+            'name': activity['name'],
+            'moving_time': activity['moving_time'],
             'distance_meters': activity['distance'],
             'average_speed': activity['average_speed'],
             'start_date': activity['start_date'],
@@ -59,13 +70,13 @@ class StravaService {
           await _supabase
               .from('activities')
               .upsert(activityData, onConflict: 'activity_id');
+
+          addedRunsCount++;
         }
 
         print(
-          'Harika! Tüm aktiviteler Supabase activities tablosuna kaydedildi/güncellendi.',
+          'Harika! Filtrelemeden geçen $addedRunsCount adet KOŞU Supabase tablona kaydedildi/güncellendi.',
         );
-
-        // TODO: Bir sonraki adımda bu listeyi döngüye sokup Supabase'deki 'activities' tablosuna yazacağız.
       } else {
         print('Strava verileri vermedi. Hata Kodu: ${response.statusCode}');
         print('Hata Detayı: ${response.body}');
