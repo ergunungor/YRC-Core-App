@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math' as math;
 
 class ProfileScreen extends StatefulWidget {
@@ -8,60 +9,147 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-// WidgetsBindingObserver ekleyerek uygulamanın açılıp kapanmasını dinliyoruz
 class _ProfileScreenState extends State<ProfileScreen>
     with WidgetsBindingObserver {
-  // Temel Renklerimiz
+  // --- TEMEL RENKLER ---
   final Color stravaOrange = const Color(0xFFFC4C02);
   final Color nikeVolt = const Color(0xFFCEFF00);
   final Color neonBlue = const Color(0xFF82B1F2);
   final Color cardColor = const Color(0xFF0A121F);
-  final Color cardBorder = Colors.white.withOpacity(0.05);
+  final Color cardBorder = Colors.white.withAlpha(
+    (0.5 * 255).round(),
+  ); // Opaklığı %50 olarak ayarladık
+
+  // --- DİNAMİK VERİ DEĞİŞKENLERİ ---
+  String _avatarUrl = '';
+  String _fullName = 'YÜKLENİYOR...';
+
+  final _weeklyGoal = 50.0;
+  double _currentWeeklyKm = 0.0;
+
+  String _avgPace = '--:-- /km';
+  String _totalDuration = '--s --d';
 
   @override
   void initState() {
     super.initState();
-    // Uygulama durumunu dinlemeye başlıyoruz
     WidgetsBinding.instance.addObserver(this);
 
-    // Sayfa ilk açıldığında sessizce verileri güncelle
     _loadUserStats();
     _syncStravaDataSilent();
   }
 
   @override
   void dispose() {
-    // Sayfa kapanırsa dinlemeyi bırakıyoruz (Hafıza sızıntısını önler)
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  // UYGULAMA ARKA PLANDAN ÖN PLANA ÇIKTIĞINDA ÇALIŞIR
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      debugPrint("Uygulamaya dönüldü, veriler arka planda güncelleniyor...");
       _syncStravaDataSilent();
       _loadUserStats();
     }
   }
 
   Future<void> _loadUserStats() async {
-    // Backend veri çekme simülasyonu
+    try {
+      final supabase = Supabase.instance.client;
+
+      // 1. KULLANICI BİLGİLERİNİ ÇEK
+      final userData =
+          await supabase
+              .from('users')
+              .select('first_name, last_name, profile_url, strava_id')
+              .limit(1)
+              .maybeSingle();
+
+      if (userData == null || userData['strava_id'] == null) {
+        debugPrint('Kullanıcı veya strava_id bulunamadı!');
+        if (mounted) {
+          setState(() {
+            _fullName = 'Kayıt Bulunamadı';
+          });
+        }
+        return;
+      }
+
+      final myStravaId = userData['strava_id'];
+
+      // 2. BU HAFTANIN PAZARTESİ GÜNÜNÜ BUL
+      final now = DateTime.now();
+      // now.weekday: Pazartesi = 1, Salı = 2 ... Pazar = 7
+      // İçinde bulunduğumuz günden (weekday - 1) kadar gün çıkarırsak tam Pazartesiye ulaşırız.
+      final startOfWeek = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: now.weekday - 1));
+      final startOfWeekIso =
+          startOfWeek.toIso8601String(); // Pazartesi 00:00:00
+
+      // 3. PAZARTESİDEN İTİBAREN OLAN AKTİVİTELERİ ÇEK
+      final activities = await supabase
+          .from('activities')
+          .select('distance_meters, moving_time')
+          .eq('strava_id', myStravaId)
+          .gte(
+            'start_date',
+            startOfWeekIso,
+          ); // Sadece bu haftanın başından itibaren!
+
+      double totalKm = 0.0;
+      int totalSeconds = 0;
+
+      for (var run in activities) {
+        totalKm += (run['distance_meters'] ?? 0) / 1000;
+        totalSeconds += (run['moving_time'] ?? 0) as int;
+      }
+
+      // Pace (Hız) Hesaplama
+      String calculatedPace = '--:--';
+      if (totalKm > 0) {
+        int paceSeconds = (totalSeconds / totalKm).round();
+        int minutes = paceSeconds ~/ 60;
+        int seconds = paceSeconds % 60;
+        calculatedPace = '$minutes:${seconds.toString().padLeft(2, '0')}';
+      }
+
+      // Süre Hesaplama
+      int hours = totalSeconds ~/ 3600;
+      int mins = (totalSeconds % 3600) ~/ 60;
+
+      // Ekrana Verileri Bas
+      if (mounted) {
+        setState(() {
+          _avatarUrl = userData['profile_url'] ?? '';
+          _fullName =
+              '${userData['first_name'] ?? ''} ${userData['last_name'] ?? ''}'
+                  .trim();
+          if (_fullName.isEmpty) _fullName = 'İsimsiz Koşucu';
+
+          _currentWeeklyKm = totalKm;
+          _avgPace = '$calculatedPace /km';
+          _totalDuration = '${hours}s ${mins}d';
+        });
+      }
+    } catch (e) {
+      debugPrint('Veri çekilirken hata oluştu: $e');
+    }
   }
 
   Future<void> _syncStravaDataSilent() async {
-    // Strava arka plan senkronizasyon simülasyonu
+    // Strava API'den arka planda son koşuları getiren kod
   }
 
-  // Kullanıcı ekranı aşağı kaydırdığında çalışacak fonksiyon (Pull-to-Refresh)
   Future<void> _onRefresh() async {
     await _syncStravaDataSilent();
     await _loadUserStats();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Veriler güncellendi! 🏃‍♂️'),
+          content: const Text('Veriler başarıyla güncellendi!'),
           backgroundColor: stravaOrange,
           behavior: SnackBarBehavior.floating,
         ),
@@ -69,7 +157,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  // Standart Kare İstatistik Kartı
   Widget _buildStatCard(
     String title,
     String value,
@@ -101,7 +188,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             Text(
               title,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.5),
+                color: Colors.white.withAlpha((0.5 * 255).round()),
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.5,
@@ -113,7 +200,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // Geniş (Full-width) İstatistik Kartı
   Widget _buildWideStatCard(
     String title,
     String value,
@@ -133,7 +219,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withAlpha((0.1 * 255).round()),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 28),
@@ -146,7 +232,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 Text(
                   title,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
+                    color: Colors.white.withAlpha((0.5 * 255).round()),
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.5,
@@ -171,10 +257,10 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Örnek Parametreler (İleride Backend'den dolacak)
-    double weeklyGoal = 50.0;
-    double currentWeeklyKm = 32.5;
-    double progress = (currentWeeklyKm / weeklyGoal).clamp(0.0, 1.0);
+    double progress =
+        _weeklyGoal > 0
+            ? (_currentWeeklyKm / _weeklyGoal).clamp(0.0, 1.0)
+            : 0.0;
 
     return SafeArea(
       child: RefreshIndicator(
@@ -187,16 +273,17 @@ class _ProfileScreenState extends State<ProfileScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. KULLANICI BİLGİLERİ (Küçültüldü ve toparlandı)
               Row(
                 children: [
                   CircleAvatar(
                     radius: 30,
                     backgroundColor: stravaOrange,
-                    child: const CircleAvatar(
+                    child: CircleAvatar(
                       radius: 28,
                       backgroundImage: NetworkImage(
-                        'https://i.pravatar.cc/150',
+                        _avatarUrl.isNotEmpty
+                            ? _avatarUrl
+                            : 'https://ui-avatars.com/api/?name=${_fullName.replaceAll(' ', '+')}&background=FC4C02&color=fff',
                       ),
                     ),
                   ),
@@ -204,9 +291,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'ERGÜN ÜNGÖR',
-                        style: TextStyle(
+                      Text(
+                        _fullName,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 18,
                           fontWeight: FontWeight.w900,
@@ -227,10 +314,8 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
               const SizedBox(height: 30),
 
-              // 2. APPLE FITNESS TARZI YARIM DAİRE HEDEF GRAFİĞİ (Nefes Alan Tasarım)
               Center(
                 child: SizedBox(
-                  // Genişlik ve yüksekliği biraz daha derli toplu hale getirdik
                   width: 240,
                   height: 125,
                   child: CustomPaint(
@@ -239,7 +324,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                       progressColor: nikeVolt,
                       backgroundColor: Colors.white.withAlpha(127),
                     ),
-                    // Yazıları grafiğin tepesinden uzaklaştırıp alt merkeze oturtmak için Padding ekledik
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 1.0),
                       child: Column(
@@ -248,42 +332,39 @@ class _ProfileScreenState extends State<ProfileScreen>
                           Text(
                             'HAFTALIK HEDEF',
                             style: TextStyle(
-                              color: Colors.white.withAlpha(127),
-                              fontSize:
-                                  11, // 13'ten 11'e düşürdük, daha zarif oldu
+                              color: Colors.white.withAlpha((127).round()),
+                              fontSize: 11,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 2.0,
                             ),
                           ),
-                          const SizedBox(
-                            height: 2,
-                          ), // Metinlerin arasını biraz sıkılaştırdık
+                          const SizedBox(height: 2),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.baseline,
                             textBaseline: TextBaseline.alphabetic,
                             children: [
                               Text(
-                                currentWeeklyKm.toStringAsFixed(1),
+                                _currentWeeklyKm.toStringAsFixed(1),
                                 style: TextStyle(
                                   color: nikeVolt,
-                                  fontSize:
-                                      34, // 42 çok devasaydı, 34 ile yaya olan mesafeyi açtık
+                                  fontSize: 34,
                                   fontWeight: FontWeight.w900,
                                   shadows: [
-                                    // Metnin kendi parlamasını da biraz yumuşattık ki yay ile karışmasın
                                     Shadow(
-                                      color: nikeVolt.withOpacity(0.4),
+                                      color: nikeVolt.withAlpha(
+                                        (0.4 * 255).round(),
+                                      ),
                                       blurRadius: 10,
                                     ),
                                   ],
                                 ),
                               ),
                               Text(
-                                ' / ${weeklyGoal.toInt()} km',
+                                ' / ${_weeklyGoal.toInt()} km',
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 16, // 18'den 16'ya çektik
+                                  fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -297,21 +378,18 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
               const SizedBox(height: 40),
 
-              // 3. PARAMETRELER IZGARASI (6 Adet Metrik)
-
-              // Satır 1: Hafta Toplam Km & YRC ile Km
               Row(
                 children: [
                   _buildStatCard(
                     'BU HAFTA (TOPLAM)',
-                    '32.5 km',
+                    '${_currentWeeklyKm.toStringAsFixed(1)} km',
                     Icons.directions_run,
                     neonBlue,
                   ),
                   const SizedBox(width: 16),
                   _buildStatCard(
                     'BU HAFTA (YRC İLE)',
-                    '15.0 km',
+                    'Yakında', // <-- Placeholder eklendi
                     Icons.groups_rounded,
                     stravaOrange,
                   ),
@@ -319,19 +397,18 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
               const SizedBox(height: 16),
 
-              // Satır 2: Ort Pace & Koşu Süresi
               Row(
                 children: [
                   _buildStatCard(
                     'ORT. PACE (1 HFT)',
-                    '4:45 /km',
+                    _avgPace,
                     Icons.speed_rounded,
                     Colors.white,
                   ),
                   const SizedBox(width: 16),
                   _buildStatCard(
                     'SÜRE (1 HFT)',
-                    '3s 15d',
+                    _totalDuration,
                     Icons.timer_outlined,
                     nikeVolt,
                   ),
@@ -339,15 +416,14 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
               const SizedBox(height: 16),
 
-              // Satır 3: YRC Etkinlik Katılımı (Geniş Kart)
               _buildWideStatCard(
                 'YRC ETKİNLİK KATILIMI',
-                '4 Aktivite',
+                'Çok Yakında', // <-- Placeholder eklendi
                 Icons.local_activity_rounded,
                 Colors.purpleAccent,
               ),
 
-              const SizedBox(height: 40), // Alt navigasyona pay
+              const SizedBox(height: 40),
             ],
           ),
         ),
@@ -356,7 +432,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 }
 
-// APPLE FITNESS TARZI YARIM DAİRE ÇİZİCİSİ (NEON GLOW EFEKTLİ)
 class HalfCircleProgressPainter extends CustomPainter {
   final double progress;
   final Color progressColor;
@@ -370,9 +445,7 @@ class HalfCircleProgressPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Çizgiyi biraz incelttik, grafiğe zarafet kattı (Eski: 18.0)
     double strokeWidth = 15.0;
-
     Rect rect = Rect.fromLTWH(0, strokeWidth / 2, size.width, size.height * 2);
 
     Paint backgroundPaint =
@@ -384,14 +457,11 @@ class HalfCircleProgressPainter extends CustomPainter {
 
     Paint shadowPaint =
         Paint()
-          ..color = progressColor.withOpacity(0.4)
+          ..color = progressColor.withAlpha((0.4 * 255).round())
           ..strokeWidth = strokeWidth
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round
-          ..maskFilter = const MaskFilter.blur(
-            BlurStyle.normal,
-            12,
-          ); // Blur yelpazesini bir tık daralttık
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
 
     Paint progressPaint =
         Paint()

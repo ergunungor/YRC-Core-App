@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 import 'profile_screen.dart';
+import 'leaderboard_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -24,12 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
         style: TextStyle(color: Colors.white, fontSize: 20),
       ),
     ),
-    const Center(
-      child: Text(
-        'LİDERLİK TABLOSU',
-        style: TextStyle(color: Colors.white, fontSize: 20),
-      ),
-    ),
+    const LeaderboardScreen(),
     const Center(
       child: Text(
         'AKTİVİTELERİM',
@@ -68,9 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: activeColor.withOpacity(
-                      0.6,
-                    ), // Işığın opaklığını artırdık (Daha belirgin)
+                    color: activeColor.withAlpha((0.5 * 255).round()),
                     blurRadius:
                         30, // Işığın dışarıya doğru çok daha yumuşak ve geniş dağılması
                     spreadRadius:
