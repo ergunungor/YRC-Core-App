@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 import 'profile_screen.dart';
 import 'leaderboard_screen.dart';
+import 'arena_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,12 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ),
     const LeaderboardScreen(),
-    const Center(
-      child: Text(
-        'AKTİVİTELERİM',
-        style: TextStyle(color: Colors.white, fontSize: 20),
-      ),
-    ),
+    const ArenaScreen(),
     const ProfileScreen(),
   ];
 
