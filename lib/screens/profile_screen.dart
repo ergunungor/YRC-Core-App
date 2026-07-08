@@ -24,8 +24,9 @@ class _ProfileScreenState extends State<ProfileScreen>
   String _avatarUrl = '';
   String _fullName = 'YÜKLENİYOR...';
 
-  final _weeklyGoal = 50.0;
+  double _weeklyGoal = 15.0;
   double _currentWeeklyKm = 0.0;
+  int? _myStravaId;
 
   String _avgPace = '--:-- /km';
   String _totalDuration = '--s --d';
@@ -60,7 +61,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       final userData =
           await supabase
               .from('users')
-              .select('first_name, last_name, profile_url, strava_id')
+              .select(
+                'first_name, last_name, profile_url, strava_id, weekly_goal',
+              )
               .limit(1)
               .maybeSingle();
 
@@ -72,6 +75,16 @@ class _ProfileScreenState extends State<ProfileScreen>
           });
         }
         return;
+      }
+      _myStravaId = userData['strava_id'];
+
+      // Eğer veritabanında weekly_goal varsa onu al, yoksa 15.0 kullan
+      if (mounted) {
+        setState(() {
+          _weeklyGoal =
+              double.tryParse(userData['weekly_goal']?.toString() ?? '15') ??
+              15.0;
+        });
       }
 
       final myStravaId = userData['strava_id'];
@@ -238,6 +251,152 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  void _showGoalSelector() {
+    // Hedef listesini 40'a kadar genişlettik
+    final List<int> goalOptions = [5, 10, 15, 20, 25, 30, 35, 40];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: cardColor,
+      // Yuvarlatılmış üst köşeler
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.only(
+            top: 12,
+            left: 24,
+            right: 24,
+            bottom: 20,
+          ),
+          // OPTİMİZASYON 1: Yüksekliği 180'e sabitleyerek alttaki gereksiz boşluğu tamamen yok ettik
+          height: 180,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // OPTİMİZASYON 2: Üste premium uygulamalardaki drag barı (tutamacı) yerleştirdik
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(40),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              Text(
+                'HAFTALIK HEDEFİNİ SEÇ',
+                style: TextStyle(
+                  color: Colors.white.withAlpha(140),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // OPTİMİZASYON 3: Yana kaydırılabilir yatay listeyi kurduk
+              Expanded(
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  physics:
+                      const BouncingScrollPhysics(), // iOS tarzı premium esneme efekti
+                  itemCount: goalOptions.length,
+                  itemBuilder: (context, index) {
+                    int goal = goalOptions[index];
+                    bool isSelected = _weeklyGoal == goal;
+
+                    return GestureDetector(
+                      onTap: () async {
+                        // 1. Önce ekranı anında güncelle ki kullanıcı beklemesin (Optimistic UI)
+                        setState(() {
+                          _weeklyGoal = goal.toDouble();
+                        });
+                        Navigator.pop(context); // Menüyü kapat
+
+                        // 2. Arka planda veritabanına kaydet
+                        if (_myStravaId != null) {
+                          try {
+                            await Supabase.instance.client
+                                .from('users')
+                                .update({'weekly_goal': goal})
+                                .eq('strava_id', _myStravaId!);
+                          } catch (e) {
+                            debugPrint('Hedef güncellenirken hata oluştu: $e');
+                          }
+                        }
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 65, // Kartların ideal genişliği
+                        margin: const EdgeInsets.only(right: 12, bottom: 6),
+                        decoration: BoxDecoration(
+                          color:
+                              isSelected
+                                  ? nikeVolt
+                                  : Colors.white.withAlpha(10),
+                          borderRadius: BorderRadius.circular(
+                            20,
+                          ), // Yumuşatılmış köşe hatları
+                          border: Border.all(
+                            color:
+                                isSelected
+                                    ? nikeVolt
+                                    : Colors.white.withAlpha(25),
+                            width: 1.5,
+                          ),
+                          // OPTİMİZASYON 4: Seçili karta hafif bir neon glow (parlama) efekti verdik
+                          boxShadow:
+                              isSelected
+                                  ? [
+                                    BoxShadow(
+                                      color: nikeVolt.withAlpha(60),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ]
+                                  : [],
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '$goal',
+                              style: TextStyle(
+                                color: isSelected ? Colors.black : Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            Text(
+                              'km',
+                              style: TextStyle(
+                                color:
+                                    isSelected
+                                        ? Colors.black54
+                                        : Colors.white54,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildProfileContent(double progress) {
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -331,12 +490,26 @@ class _ProfileScreenState extends State<ProfileScreen>
                               ],
                             ),
                           ),
-                          Text(
-                            ' / ${_weeklyGoal.toInt()} km',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                          GestureDetector(
+                            onTap: _showGoalSelector,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              margin: const EdgeInsets.only(left: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withAlpha(20),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '/ ${_weeklyGoal.toInt()} km ▾',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ),
                         ],
