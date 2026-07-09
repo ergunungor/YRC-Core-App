@@ -187,15 +187,6 @@ class RunnerCard extends StatelessWidget {
                   ),
                 ],
               ),
-              if (runner.distanceToNext > 0 && !runner.isCurrentUser)
-                Text(
-                  '-${runner.distanceToNext.toStringAsFixed(1)} km',
-                  style: TextStyle(
-                    color: Colors.white.withAlpha((0.5 * 255).round()),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
             ],
           ),
         ],

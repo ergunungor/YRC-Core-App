@@ -4,6 +4,7 @@ import '../widgets/shimmer_loading.dart';
 import '../services/strava_service.dart';
 import '../widgets/half_circle_progress.dart'; // Yeni Eklenen
 import '../widgets/profile_stat_cards.dart'; // Yeni Eklenen
+import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -563,7 +564,59 @@ class _ProfileScreenState extends State<ProfileScreen>
             icon: Icons.local_activity_rounded,
             color: Colors.purpleAccent,
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 32),
+
+          Center(
+            child: TextButton.icon(
+              onPressed: () async {
+                try {
+                  // 1. Supabase üzerinden oturumu tamamen kapat
+                  await Supabase.instance.client.auth.signOut();
+
+                  if (!mounted) return;
+                  // 2. Kullanıcıyı Giriş (Auth) ekranına fırlat ve geri dönmesini engelle
+
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(
+                      builder: (context) => const LoginScreen(),
+                    ),
+                    (Route<dynamic> route) => false,
+                  );
+                } catch (e) {
+                  debugPrint("Çıkış yapılırken hata oluştu: $e");
+                }
+              },
+              icon: const Icon(
+                Icons.logout_rounded,
+                color: Colors.redAccent,
+                size: 20,
+              ),
+              label: const Text(
+                'OTURUMU KAPAT',
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                backgroundColor: Colors.redAccent.withAlpha(
+                  25,
+                ), // Hafif kırmızı arka plan
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(
+                    color: Colors.redAccent.withAlpha(50),
+                  ), // İnce kırmızı çerçeve
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
         ],
       ),
     );

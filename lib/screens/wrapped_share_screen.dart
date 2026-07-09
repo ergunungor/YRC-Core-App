@@ -82,7 +82,7 @@ class WrappedShareScreen extends StatelessWidget {
           style: TextStyle(
             fontSize: 180,
             fontWeight: FontWeight.w900,
-            color: Colors.white.withOpacity(0.03),
+            color: Colors.white.withAlpha(77),
             height: 0.9,
           ),
         ),
@@ -189,7 +189,7 @@ class WrappedShareScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: Colors.white.withAlpha(26),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Row(

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:math' as math;
 
 class YRCStyle {
   static const Color background = Color(0xFF0B101A);
@@ -88,7 +87,7 @@ class _ChallengeAcceptedScreenState extends State<ChallengeAcceptedScreen>
       decoration: BoxDecoration(
         color: YRCStyle.cardBg,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: YRCStyle.accent.withOpacity(0.5), width: 1),
+        border: Border.all(color: YRCStyle.accent, width: 1),
       ),
       child: Column(
         children: [
@@ -165,7 +164,7 @@ class _ChallengeAcceptedScreenState extends State<ChallengeAcceptedScreen>
                     height: 150,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: YRCStyle.accent.withOpacity(0.2),
+                      color: YRCStyle.accent.withAlpha(51),
                     ),
                   ),
                 ),
