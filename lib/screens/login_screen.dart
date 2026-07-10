@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart'; // Uygulamanın web'de mi mobilde mi olduğunu anlamamızı sağlar
 import 'dart:async';
 import 'package:app_links/app_links.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -81,8 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
           final supabase = Supabase.instance.client;
 
           await supabase.from('users').upsert({
-            'strava_id':
-                athleteData['id'], // BIGINT olduğu için .toString() yok
+            'strava_id': athleteData['id'],
             'first_name': athleteData['firstname'],
             'last_name': athleteData['lastname'],
             'profile_url': athleteData['profile'],
@@ -90,7 +90,11 @@ class _LoginScreenState extends State<LoginScreen> {
             'refresh_token': refreshToken,
           });
 
-          print('BINGO! Kullanıcı veritabanına başarıyla kaydedildi!');
+          final prefs = await SharedPreferences.getInstance();
+
+          await prefs.setInt('current_strava_id', athleteData['id']);
+
+          print('✅ Current Strava ID kaydedildi: ${athleteData['id']}');
         } catch (dbError) {
           print('Supabase Kayıt Hatası: $dbError');
         }

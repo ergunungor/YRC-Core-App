@@ -5,6 +5,7 @@ import '../services/strava_service.dart';
 import '../widgets/half_circle_progress.dart'; // Yeni Eklenen
 import '../widgets/profile_stat_cards.dart'; // Yeni Eklenen
 import 'login_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -59,13 +60,18 @@ class _ProfileScreenState extends State<ProfileScreen>
     try {
       final supabase = Supabase.instance.client;
 
+      final prefs = await SharedPreferences.getInstance();
+      final myStravaId = prefs.getInt('current_strava_id');
+
+      if (myStravaId == null) return;
+
       final userData =
           await supabase
               .from('users')
               .select(
                 'first_name, last_name, profile_url, strava_id, weekly_goal',
               )
-              .limit(1)
+              .eq('strava_id', myStravaId)
               .maybeSingle();
 
       if (userData == null || userData['strava_id'] == null) {
@@ -88,7 +94,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         });
       }
 
-      final myStravaId = userData['strava_id'];
       final now = DateTime.now();
       final startOfWeekIso =
           DateTime(
@@ -141,11 +146,16 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _syncStravaDataSilent() async {
     try {
       final supabase = Supabase.instance.client;
+      final prefs = await SharedPreferences.getInstance();
+      final myStravaId = prefs.getInt('current_strava_id');
+
+      if (myStravaId == null) return;
+
       final userData =
           await supabase
               .from('users')
               .select('strava_id, access_token')
-              .limit(1)
+              .eq('strava_id', myStravaId)
               .maybeSingle();
 
       if (userData != null &&

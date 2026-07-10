@@ -1,25 +1,13 @@
+// ignore_for_file: avoid_print
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 import 'wrapped_share_screen.dart';
-
-class YRCStyle {
-  static const Color background = Color(0xFF0B101A);
-  static const Color cardBg = Color(0xFF161F33);
-  static const Color accent = Color(0xFFD4FF00); // Neon Volt
-  static const Color textMain = Color(0xFFF8FAFC);
-  static const Color textSec = Color(0xFF94A3B8);
-
-  static final List<BoxShadow> neonGlow = [
-    BoxShadow(
-      color: accent.withAlpha(77),
-      blurRadius: 16,
-      offset: const Offset(0, 4),
-    ),
-  ];
-}
+import '../theme/app_theme.dart';
+import '../widgets/arena_widgets.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ScoreRank {
   final int rank;
@@ -48,6 +36,14 @@ class _ArenaScreenState extends State<ArenaScreen> {
   List<ScoreRank> _currentPodium = [];
   bool _isLoading = true;
 
+  int _myRank = 0;
+  int _pointsToNext = 0;
+  String _targetName = "...";
+  bool _hasRunThisWeek = false;
+
+  double _activeDays = 0.0;
+  double _totalElev = 0.0;
+  double _totalDist = 0.0;
   @override
   void initState() {
     super.initState();
@@ -58,10 +54,44 @@ class _ArenaScreenState extends State<ArenaScreen> {
   Future<void> _fetchPerformanceData() async {
     setState(() => _isLoading = true);
 
+    // YENİ: Fonksiyonun tetiklendiğini kesin olarak görelim
+    print("🚨 [ARENA DEBUG] 1. Fonksiyon tetiklendi!");
+
     try {
       final supabase = Supabase.instance.client;
 
-      // Doğrudan SQL View'a bağlanıp haftanın en yüksek YRC skorlarını alıyoruz
+      final prefs = await SharedPreferences.getInstance();
+      final myStravaId = prefs.getInt('current_strava_id');
+
+      print("🚨 [ARENA DEBUG] Current Strava ID: $myStravaId");
+
+      if (myStravaId != null) {
+        final statsData =
+            await supabase
+                .from('arena_weekly_stats')
+                .select('active_days, total_distance_km, total_elevation')
+                .eq('strava_id', myStravaId)
+                .maybeSingle();
+
+        print("🚨 [ARENA DEBUG] Stats Data: $statsData");
+
+        if (statsData != null) {
+          setState(() {
+            _activeDays = (statsData['active_days'] as num?)?.toDouble() ?? 0.0;
+            _totalDist =
+                (statsData['total_distance_km'] as num?)?.toDouble() ?? 0.0;
+            _totalElev =
+                (statsData['total_elevation'] as num?)?.toDouble() ?? 0.0;
+            _hasRunThisWeek = _activeDays > 0;
+          });
+        }
+      } else {
+        print(
+          "🚨 [ARENA DEBUG] KRİTİK HATA: User NULL geldi. Kullanıcı giriş yapmamış görünüyor.",
+        );
+      }
+
+      // --- LİDERLİK PODYUMUNU ÇEKİYORUZ ---
       final List<dynamic> response = await supabase
           .from('arena_weekly_scores')
           .select()
@@ -73,12 +103,28 @@ class _ArenaScreenState extends State<ArenaScreen> {
         for (int i = 0; i < response.length; i++) {
           final row = response[i];
           String firstName = row['first_name']?.toString() ?? 'Koşucu';
+          int score = int.tryParse(row['yrc_score']?.toString() ?? '0') ?? 0;
+
+          // DİNAMİK SIRALAMA: Podyumda kendi adımızı bulup sıramızı ve rakibi hesaplıyoruz
+          if (firstName == 'Ergün') {
+            _myRank = i + 1;
+            if (i > 0) {
+              int targetScore =
+                  int.tryParse(
+                    response[i - 1]['yrc_score']?.toString() ?? '0',
+                  ) ??
+                  0;
+              _pointsToNext = targetScore - score;
+              _targetName =
+                  response[i - 1]['first_name']?.toString() ?? 'Rakip';
+            }
+          }
 
           fetched.add(
             ScoreRank(
               rank: i + 1,
               name: firstName,
-              score: int.tryParse(row['yrc_score']?.toString() ?? '0') ?? 0,
+              score: score,
               avatarUrl:
                   row['profile_url'] ??
                   'https://ui-avatars.com/api/?name=$firstName&background=82B1F2&color=fff',
@@ -132,7 +178,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: YRCStyle.background,
+      backgroundColor: AppColors.yrcBackground,
       body: SafeArea(
         bottom: false,
         child: Align(
@@ -144,6 +190,29 @@ class _ArenaScreenState extends State<ArenaScreen> {
               slivers: [
                 _buildHeader(),
                 _buildPodium(),
+
+                // --- YENİ EKLENEN KISIM BAŞLANGICI ---
+                // Şimdilik StatusCard'ı statik değerlerle koyalım, sonraki adımda dinamik yapacağız.
+                SliverToBoxAdapter(
+                  child: ArenaStatusCard(
+                    currentRank: _myRank,
+                    pointsToNext: _pointsToNext,
+                    targetName: _targetName,
+                    hasRunThisWeek: _hasRunThisWeek,
+                  ),
+                ),
+
+                _buildSectionTitle("YRC KONTRATLARI"),
+
+                // Görev kartlarımıza SQL'den çektiğimiz canlı verileri paslıyoruz (Pass-down)
+                SliverToBoxAdapter(
+                  child: ArenaBountiesList(
+                    activeDays: _activeDays.toInt(), // Widget int bekliyor
+                    totalElev: _totalElev,
+                    totalDist: _totalDist,
+                  ),
+                ),
+                // --- YENİ EKLENEN KISIM BİTİŞİ ---
                 const SliverToBoxAdapter(child: SizedBox(height: 60)),
               ],
             ),
@@ -166,7 +235,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
               Text(
                 "YRC ARENA",
                 style: TextStyle(
-                  color: YRCStyle.accent,
+                  color: AppColors.yrcAccent,
                   letterSpacing: 4,
                   fontWeight: FontWeight.w900,
                   fontSize: 11,
@@ -176,7 +245,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
               Text(
                 "HAFTANIN\nPARLAYANLARI",
                 style: TextStyle(
-                  color: YRCStyle.textMain,
+                  color: AppColors.yrcTextMain,
                   fontSize: 34,
                   fontWeight: FontWeight.w900,
                   height: 1.1,
@@ -194,7 +263,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
             child: IconButton(
               icon: const Icon(
                 Icons.ios_share_rounded,
-                color: YRCStyle.textMain,
+                color: AppColors.yrcTextMain,
               ),
               onPressed:
                   () => Navigator.push(
@@ -217,7 +286,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
         child: SizedBox(
           height: 250,
           child: Center(
-            child: CircularProgressIndicator(color: YRCStyle.accent),
+            child: CircularProgressIndicator(color: AppColors.yrcAccent),
           ),
         ),
       );
@@ -230,7 +299,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
             child: Text(
               "Bu hafta henüz YRC skoru oluşmadı.",
               style: TextStyle(
-                color: YRCStyle.textSec,
+                color: AppColors.yrcTextSec,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -264,6 +333,21 @@ class _ArenaScreenState extends State<ArenaScreen> {
     );
   }
 
+  Widget _buildSectionTitle(String title) => SliverToBoxAdapter(
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: AppColors.yrcTextSec,
+          letterSpacing: 2,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    ),
+  );
+
   Widget _podiumAvatar(ScoreRank rankUser, double size, double heightOffset) {
     return Padding(
       padding: EdgeInsets.only(bottom: heightOffset),
@@ -280,17 +364,20 @@ class _ArenaScreenState extends State<ArenaScreen> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: rankUser.isKing ? YRCStyle.accent : YRCStyle.cardBg,
+                    color:
+                        rankUser.isKing
+                            ? AppColors.yrcAccent
+                            : AppColors.yrcCardBg,
                     width: rankUser.isKing ? 4 : 2,
                   ),
-                  boxShadow: rankUser.isKing ? YRCStyle.neonGlow : [],
+                  boxShadow: rankUser.isKing ? AppColors.yrcNeonGlow : [],
                 ),
                 child: ClipOval(
                   child: CachedNetworkImage(
                     imageUrl: rankUser.avatarUrl,
                     fit: BoxFit.cover,
                     placeholder:
-                        (context, url) => Container(color: YRCStyle.cardBg),
+                        (context, url) => Container(color: AppColors.yrcCardBg),
                     errorWidget:
                         (context, url, error) =>
                             const Icon(Icons.error, color: Colors.white24),
@@ -303,13 +390,13 @@ class _ArenaScreenState extends State<ArenaScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: YRCStyle.cardBg,
+                      color: AppColors.yrcCardBg,
                       shape: BoxShape.circle,
-                      boxShadow: YRCStyle.neonGlow,
+                      boxShadow: AppColors.yrcNeonGlow,
                     ),
                     child: const Icon(
                       Icons.workspace_premium_rounded,
-                      color: YRCStyle.accent,
+                      color: AppColors.yrcAccent,
                       size: 24,
                     ),
                   ),
@@ -320,9 +407,15 @@ class _ArenaScreenState extends State<ArenaScreen> {
                   width: 28,
                   height: 28,
                   decoration: BoxDecoration(
-                    color: rankUser.isKing ? YRCStyle.accent : YRCStyle.cardBg,
+                    color:
+                        rankUser.isKing
+                            ? AppColors.yrcAccent
+                            : AppColors.yrcCardBg,
                     shape: BoxShape.circle,
-                    border: Border.all(color: YRCStyle.background, width: 3),
+                    border: Border.all(
+                      color: AppColors.yrcBackground,
+                      width: 3,
+                    ),
                   ),
                   alignment: Alignment.center,
                   child: Text(
@@ -341,7 +434,10 @@ class _ArenaScreenState extends State<ArenaScreen> {
           Text(
             rankUser.name,
             style: TextStyle(
-              color: rankUser.isKing ? YRCStyle.textMain : YRCStyle.textSec,
+              color:
+                  rankUser.isKing
+                      ? AppColors.yrcTextMain
+                      : AppColors.yrcTextSec,
               fontWeight: FontWeight.bold,
               fontSize: rankUser.isKing ? 18 : 14,
             ),
@@ -351,7 +447,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
           Text(
             "${rankUser.score} PTS",
             style: TextStyle(
-              color: YRCStyle.accent,
+              color: AppColors.yrcAccent,
               fontWeight: FontWeight.w900,
               fontSize: rankUser.isKing ? 16 : 14,
             ),
