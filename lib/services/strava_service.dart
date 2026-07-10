@@ -7,93 +7,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class StravaService {
   final _supabase = Supabase.instance.client;
 
-  // Saniyeyi "18:30" gibi şık bir Pace/Süre formatına çeviren yardımcı alet
-  String _formatTime(int seconds) {
-    int h = seconds ~/ 3600;
-    int m = (seconds % 3600) ~/ 60;
-    int s = seconds % 60;
-
-    if (h > 0) {
-      return '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-    }
-    return '$m:${s.toString().padLeft(2, '0')}';
-  }
-
-  // PR (Best Effort) verilerini çekip User tablosuna yazma fonksiyonu
-  Future<void> _extractAndSavePRs(
-    String accessToken,
-    int stravaId,
-    int activityId,
-  ) async {
-    final url = Uri.parse(
-      'https://www.strava.com/api/v3/activities/$activityId',
-    );
-
-    try {
-      final response = await http.get(
-        url,
-        headers: {'Authorization': 'Bearer $accessToken'},
-      );
-
-      if (response.statusCode == 200) {
-        final activityDetail = jsonDecode(response.body);
-        final List<dynamic> bestEfforts = activityDetail['best_efforts'] ?? [];
-
-        if (bestEfforts.isNotEmpty) {
-          // Güncellenecek kolonları toplayacağımız harita (Map)
-          Map<String, dynamic> prUpdates = {};
-
-          for (var effort in bestEfforts) {
-            String prName =
-                effort['name']; // "400m", "1 mile", "5k", "10k", "Half Marathon" vs.
-            int elapsedTime = effort['elapsed_time']; // Koştuğu süre (saniye)
-
-            // Strava'nın isimlerini bizim User tablosundaki kolonlara çeviriyoruz
-            if (prName.toLowerCase().contains("400m")) {
-              prUpdates['pr_400m'] = _formatTime(elapsedTime);
-              prUpdates['pr_400m_sec'] =
-                  elapsedTime; // Sıralama için gizli saniye kolonu (opsiyonel ama önerilir)
-            } else if (prName.toLowerCase().contains("1 mile")) {
-              prUpdates['pr_1mil'] = _formatTime(elapsedTime);
-              prUpdates['pr_1mil_sec'] = elapsedTime;
-            } else if (prName.toLowerCase().contains("3k") ||
-                prName.toLowerCase().contains("2 mile")) {
-              // Bazen 3k yerine 2 mile yazar Strava
-              prUpdates['pr_3k'] = _formatTime(elapsedTime);
-              prUpdates['pr_3k_sec'] = elapsedTime;
-            } else if (prName.toLowerCase().contains("5k")) {
-              prUpdates['pr_5k'] = _formatTime(elapsedTime);
-              prUpdates['pr_5k_sec'] = elapsedTime;
-            } else if (prName.toLowerCase().contains("10k")) {
-              prUpdates['pr_10k'] = _formatTime(elapsedTime);
-              prUpdates['pr_10k_sec'] = elapsedTime;
-            } else if (prName.toLowerCase().contains("half")) {
-              prUpdates['pr_21k'] = _formatTime(elapsedTime);
-              prUpdates['pr_21k_sec'] = elapsedTime;
-            }
-          }
-
-          // Eğer kullanıcının rekoru varsa ve harita dolduysa Supabase'deki Users tablosuna yapıştırıyoruz!
-          if (prUpdates.isNotEmpty) {
-            print(
-              "👑 PR (Rekor) Yakalandı! Kullanıcı profiline (users tablosuna) güncelleniyor...",
-            );
-
-            // Supabase'deki kullanıcının MEVCUT PR saniyelerini çekip,
-            // sadece GERÇEKTEN daha iyi (daha kısa) bir süreyse üstüne yazmak mantıklı olur.
-            // (Şimdilik direkt yazıyoruz, demoda anında göstermek için ideal)
-            await _supabase
-                .from('users')
-                .update(prUpdates)
-                .eq('strava_id', stravaId);
-          }
-        }
-      }
-    } catch (e) {
-      print('PR Detayı Çekilemedi: $e');
-    }
-  }
-
   // --- ANA SENKRONİZASYON FONKSİYONU ---
   Future<void> syncRecentActivities(String accessToken, int stravaId) async {
     print('Senkronizasyon başlıyor...');
@@ -142,6 +55,7 @@ class StravaService {
             'moving_time': activity['moving_time'],
             'distance_meters': activity['distance'],
             'average_speed': activity['average_speed'],
+            'total_elevation_gain': activity['total_elevation_gain'] ?? 0,
             'start_date': activity['start_date'],
             'start_lat': startLat,
             'start_lng': startLng,
@@ -151,9 +65,6 @@ class StravaService {
               .from('activities')
               .upsert(activityData, onConflict: 'activity_id');
           addedRunsCount++;
-
-          // 🚀 KRİTİK EKLEME: İdman eklendikten sonra hemen detayına inip PR (Best Efforts) var mı diye bakıyoruz!
-          await _extractAndSavePRs(accessToken, stravaId, activity['id']);
         }
 
         print(
