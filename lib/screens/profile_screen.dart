@@ -69,7 +69,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           await supabase
               .from('users')
               .select(
-                'first_name, last_name, profile_url, strava_id, weekly_goal',
+                'first_name, last_name, profile_url, strava_id, weekly_goal, avatar_url',
               )
               .eq('strava_id', myStravaId)
               .maybeSingle();
@@ -125,7 +125,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       if (mounted) {
         setState(() {
-          _avatarUrl = userData['profile_url'] ?? '';
+          _avatarUrl = userData['avatar_url'] ?? userData['profile_url'] ?? '';
           _fullName =
               '${userData['first_name'] ?? ''} ${userData['last_name'] ?? ''}'
                   .trim();

@@ -126,6 +126,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
               name: firstName,
               score: score,
               avatarUrl:
+                  row['avatar_url'] ??
                   row['profile_url'] ??
                   'https://ui-avatars.com/api/?name=$firstName&background=82B1F2&color=fff',
               isKing: i == 0,

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/shimmer_loading.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
-
+import 'package:shared_preferences/shared_preferences.dart';
 // Yeni oluşturduğumuz dosyaları import ediyoruz
 import '../models/runner_rank.dart';
 import '../widgets/responsive_layout.dart';
@@ -47,18 +47,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     try {
       final supabase = Supabase.instance.client;
 
-      // 1. Aktif kullanıcının Strava ID'sini öğreniyoruz
-      final userData =
-          await supabase
-              .from('users')
-              .select('strava_id')
-              .limit(1)
-              .maybeSingle();
-
-      int? myStravaId;
-      if (userData != null && userData['strava_id'] != null) {
-        myStravaId = int.tryParse(userData['strava_id'].toString());
-      }
+      final prefs = await SharedPreferences.getInstance();
+      final myStravaId = prefs.getInt('current_strava_id');
 
       if (_activeTab == LeaderboardTab.totalWeekly) {
         // --- OPTİMİZASYON 1: Sadece ilk 30'u ve gerçek rank'i çek ---
@@ -118,8 +108,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           if (finalName.isEmpty || finalName.toLowerCase() == 'null') {
             finalName = 'YRC Koşucusu';
           }
-
-          String rawProfileUrl = (row['profile_url'] ?? '').toString().trim();
+          String rawProfileUrl =
+              (row['avatar_url'] ?? row['profile_url'] ?? '').toString().trim();
           String finalAvatarUrl =
               (rawProfileUrl.isNotEmpty &&
                       rawProfileUrl.toLowerCase() != 'null')
@@ -178,9 +168,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             }
 
             String finalAvatarUrl =
+                myData['avatar_url'] ??
                 myData['profile_url'] ??
                 'https://ui-avatars.com/api/?name=Sen&background=82B1F2&color=fff';
-
             myRunnerData = RunnerRank(
               rank: realRank,
               name: 'Sen',

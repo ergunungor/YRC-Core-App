@@ -3,8 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:yrc_core_app/screens/home_screen.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart'; // Uygulamanın web'de mi mobilde mi olduğunu anlamamızı sağlar
 import 'dart:async';
@@ -54,66 +52,79 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _exchangeCodeForToken(String authCode) async {
-    const String clientId = '262903';
-    const String clientSecret =
-        'b965b158fc3d49d12cb2073c79662a1b1ce5389c'; // Strava ayarlarından kopyaladığın gizli kod
-
     try {
-      final response = await http.post(
-        Uri.parse('https://www.strava.com/oauth/token'),
-        body: {
-          'client_id': clientId,
-          'client_secret': clientSecret,
-          'code': authCode,
-          'grant_type': 'authorization_code',
-        },
+      print('⏳ Supabase Edge Function ile token takası başlatılıyor...');
+
+      // Strava'ya değil, kendi CORS desteki backend'imize istek atıyoruz
+      final response = await Supabase.instance.client.functions.invoke(
+        'strava-auth',
+        body: {'code': authCode},
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final accessToken = data['access_token'];
-        final refreshToken = data['refresh_token'];
-        final athleteData = data['athlete'];
+      final data = response.data;
 
-        print('SÜPER! Access Token Alındı: $accessToken');
+      if (data == null || data['error'] != null) {
+        print('Token takası başarısız: ${data?['error']}');
+        return;
+      }
 
-        // --- İŞTE KAYIT İŞLEMİ TAM BURADA YAPILIYOR ---
+      final accessToken = data['access_token'];
+      final refreshToken = data['refresh_token'];
+      final athleteData = data['athlete'];
+
+      print('SÜPER! Access Token Alındı: $accessToken');
+
+      // --- İŞTE KAYIT İŞLEMİ TAM BURADA YAPILIYOR ---
+      try {
+        final supabase = Supabase.instance.client;
+
+        await supabase.from('users').upsert({
+          'strava_id': athleteData['id'],
+          'first_name': athleteData['firstname'],
+          'last_name': athleteData['lastname'],
+          'profile_url': athleteData['profile'],
+          'access_token': accessToken,
+          'refresh_token': refreshToken,
+        });
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('current_strava_id', athleteData['id']);
+
+        print('✅ Current Strava ID kaydedildi: ${athleteData['id']}');
+
+        // --- EDGE FUNCTION TETİKLEMESİ (AVATAR CACHE) ---
         try {
-          final supabase = Supabase.instance.client;
-
-          await supabase.from('users').upsert({
-            'strava_id': athleteData['id'],
-            'first_name': athleteData['firstname'],
-            'last_name': athleteData['lastname'],
-            'profile_url': athleteData['profile'],
-            'access_token': accessToken,
-            'refresh_token': refreshToken,
-          });
-
-          final prefs = await SharedPreferences.getInstance();
-
-          await prefs.setInt('current_strava_id', athleteData['id']);
-
-          print('✅ Current Strava ID kaydedildi: ${athleteData['id']}');
-        } catch (dbError) {
-          print('Supabase Kayıt Hatası: $dbError');
-        }
-        // ----------------------------------------------
-        if (!kIsWeb) {
-          closeInAppWebView();
-        }
-
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
+          print('⏳ Avatar cache işlemi başlatılıyor...');
+          await supabase.functions.invoke(
+            'cache-avatar',
+            body: {
+              'strava_id': athleteData['id'],
+              'profile_url': athleteData['profile'],
+            },
+          );
+          print('✅ Avatar Supabase Storage üzerinden başarıyla cachelendi.');
+        } catch (funcError) {
+          print(
+            '⚠️ Avatar cache işlemi başarısız (Login devam ediyor): $funcError',
           );
         }
-      } else {
-        print('Token takası başarısız: ${response.body}');
+        // ------------------------------------------------
+      } catch (dbError) {
+        print('Supabase Kayıt Hatası: $dbError');
+      }
+
+      if (!kIsWeb) {
+        closeInAppWebView();
+      }
+
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
       }
     } catch (e) {
-      print('İnternet veya sunucu hatası: $e');
+      print('Edge Function veya bağlantı hatası: $e');
     }
   }
 
@@ -212,7 +223,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         'read,activity:read_all,profile:read_all';
 
                     final Uri stravaAuthUrl = Uri.parse(
-                      'https://www.strava.com/oauth/mobile/authorize'
+                      'https://www.strava.com/oauth/authorize'
                       '?client_id=$clientId'
                       '&response_type=code'
                       '&redirect_uri=$redirectUri'
