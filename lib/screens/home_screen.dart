@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
+import 'package:yrc_core_app/screens/events_screen.dart';
 import 'profile_screen.dart';
 import 'leaderboard_screen.dart';
 import 'arena_screen.dart';
@@ -20,12 +21,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final Color neonBlue = const Color(0xFF82B1F2);
 
   final List<Widget> _screens = [
-    const Center(
-      child: Text(
-        'ETKİNLİKLER',
-        style: TextStyle(color: Colors.white, fontSize: 20),
-      ),
-    ),
+    const EventsScreen(),
     const LeaderboardScreen(),
     const ArenaScreen(),
     const ProfileScreen(),

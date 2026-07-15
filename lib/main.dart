@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:yrc_core_app/screens/login_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() async {
   // Flutter motorunun tamamen hazır olduğundan emin oluyoruz
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('tr_TR', null);
 
   // Supabase'i uyandırıyoruz ve anahtarları veriyoruz
   await Supabase.initialize(

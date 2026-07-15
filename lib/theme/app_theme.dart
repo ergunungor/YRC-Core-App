@@ -14,6 +14,7 @@ class AppColors {
   static const Color yrcAccent = Color(0xFFD4FF00); // Neon Volt
   static const Color yrcTextMain = Color(0xFFF8FAFC);
   static const Color yrcTextSec = Color(0xFF94A3B8);
+  static const Color yrcSoftBlue = Color.fromARGB(255, 99, 159, 255);
 
   // --- Efektler ---
   static final List<BoxShadow> yrcNeonGlow = [
@@ -33,6 +34,7 @@ class YRCStyle {
   static const Color accent = AppColors.yrcAccent;
   static const Color textMain = AppColors.yrcTextMain;
   static const Color textSec = AppColors.yrcTextSec;
+  static const Color yrcSoftBlue = AppColors.yrcSoftBlue;
   static final List<BoxShadow> neonGlow = AppColors.yrcNeonGlow;
 }
 
