@@ -104,4 +104,56 @@ class StravaService {
       print('İnternet veya bağlantı hatası: $e');
     }
   }
+
+  // --- DOĞRULAMA İÇİN SON AKTİVİTEYİ ÇEKME FONKSİYONU ---
+  Future<Map<String, dynamic>?> getLatestActivity(String accessToken) async {
+    // per_page=1 parametresi ile sadece en son aktiviteyi getiriyoruz
+    final url = Uri.parse(
+      'https://www.strava.com/api/v3/athlete/activities?per_page=1',
+    );
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {'Authorization': 'Bearer $accessToken'},
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> activities = jsonDecode(response.body);
+
+        if (activities.isEmpty) {
+          print('Strava hesabında hiç aktivite bulunamadı.');
+          return null;
+        }
+
+        final activity = activities.first;
+        final latLng = activity['start_latlng'] as List<dynamic>?;
+
+        final startLat =
+            (latLng != null && latLng.isNotEmpty) ? latLng[0] : null;
+        final startLng =
+            (latLng != null && latLng.length > 1) ? latLng[1] : null;
+
+        // İstediğimiz formatta sadeleştirip döndürüyoruz
+        return {
+          'activity_id': activity['id'],
+          'type': activity['type'], // 'Run' kontrolü için
+          'start_date':
+              activity['start_date'], // 3. Görev: Saat doğrulaması için
+          'start_lat': startLat, // 4. Görev: Konum doğrulaması için
+          'start_lng': startLng, // 4. Görev: Konum doğrulaması için
+          'distance_meters': activity['distance'],
+          'moving_time': activity['moving_time'],
+          'average_speed': activity['average_speed'],
+        };
+      } else {
+        print('Strava API Hatası Kodu: ${response.statusCode}');
+        print('Strava API Hata Detayı: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('İnternet veya bağlantı hatası (getLatestActivity): $e');
+      return null;
+    }
+  }
 }

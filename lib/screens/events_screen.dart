@@ -19,6 +19,24 @@ class _EventsScreenState extends State<EventsScreen> {
   final EventRepository _repository = EventRepository();
   final Color bgColor = const Color(0xFF01132A);
 
+  // DÜZELTME: Değişken sınıf seviyesine taşındı.
+  int? _currentStravaId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStravaId();
+  }
+
+  Future<void> _loadStravaId() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _currentStravaId = prefs.getInt('current_strava_id');
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -112,8 +130,6 @@ class _EventsScreenState extends State<EventsScreen> {
                 HapticFeedback.lightImpact();
                 final prefs = await SharedPreferences.getInstance();
 
-                // NOT: Eğer SharedPreferences'ta key 'current_strava_id' ise burayı öyle bırak
-                // Genelde 'strava_id' kullanmıştık. Hata alırsan burayı 'strava_id' yaparsın.
                 final stravaId = prefs.getInt('current_strava_id');
 
                 if (!context.mounted) return;
@@ -206,10 +222,11 @@ class _EventsScreenState extends State<EventsScreen> {
     return listItems;
   }
 
-  // --- VERİDEN KART OLUŞTURMA ---
+  // --- VERİDEN KART OLUŞTURMA (DÜZELTİLDİ) ---
   Widget _buildEventCardFromData(Map<String, dynamic> eventData) {
     DateTime date = DateTime.parse(eventData['date']);
     EventType type = EventTypeHelper.fromDbValue(eventData['type']);
+    final String eventId = eventData['id'];
 
     Color badgeColor;
     switch (type) {
@@ -233,20 +250,62 @@ class _EventsScreenState extends State<EventsScreen> {
         break;
     }
 
-    return ImmersiveEventCard(
-      imageUrl: eventData['cover_image_url'] ?? '',
-      month: DateFormat('MMM', 'tr_TR').format(date).toUpperCase(),
-      day: DateFormat('dd').format(date),
-      badgeText: type.uiLabel.toUpperCase(),
-      badgeColor: badgeColor,
-      title: eventData['title'] ?? 'İsimsiz Etkinlik',
-      time: DateFormat('EEEE • hh:mm a', 'tr_TR').format(date),
-      location: eventData['location'] ?? 'Konum Belirtilmedi',
-      distance: eventData['distance'] ?? '-',
-      pace: eventData['pace'] ?? '-',
-      participants: 0,
-      isJoined: false,
-      avatarUrls: const [],
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _repository.getEventParticipantsStream(eventId),
+      builder: (context, participantSnapshot) {
+        final participants = participantSnapshot.data ?? [];
+        final participantsCount = participants.length;
+
+        // Kullanıcı bu etkinliğe katılmış mı kontrolü
+        final bool isJoined =
+            _currentStravaId != null &&
+            participants.any((p) => p['strava_id'] == _currentStravaId);
+
+        return ImmersiveEventCard(
+          imageUrl: eventData['cover_image_url'] ?? '',
+          month: DateFormat('MMM', 'tr_TR').format(date).toUpperCase(),
+          day: DateFormat('dd').format(date),
+          badgeText: type.uiLabel.toUpperCase(),
+          badgeColor: badgeColor,
+          title: eventData['title'] ?? 'İsimsiz Etkinlik',
+          time: DateFormat('EEEE • hh:mm a', 'tr_TR').format(date),
+          location: eventData['location'] ?? 'Konum Belirtilmedi',
+          distance: eventData['distance'] ?? '-',
+          pace: eventData['pace'] ?? '-',
+          participants: participantsCount,
+          isJoined: isJoined,
+          avatarUrls: const [],
+          // DÜZELTME: onJoinTap tanımlandı ve aksiyon eklendi
+          onJoinTap: () async {
+            if (_currentStravaId == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Kullanıcı bilgisi yüklenemedi.')),
+              );
+              return;
+            }
+
+            try {
+              await _repository.toggleParticipation(
+                eventId: eventId,
+                stravaId: _currentStravaId!,
+                isJoining: !isJoined,
+              );
+              HapticFeedback.mediumImpact();
+            } // Mevcut catch bloğunu bununla değiştir
+            catch (e) {
+              print('🚨 SUPABASE KATILIM HATASI: $e'); // Terminalde görmek için
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Hata: $e'),
+                    duration: const Duration(seconds: 4),
+                  ),
+                );
+              }
+            }
+          },
+        );
+      },
     );
   }
 
@@ -323,7 +382,7 @@ class _EventsScreenState extends State<EventsScreen> {
   }
 }
 
-// --- MEVCUT IMMERSIVE EVENT CARD WIDGET'IN ---
+// --- IMMERSIVE EVENT CARD WIDGET'IN ---
 class ImmersiveEventCard extends StatelessWidget {
   final String imageUrl;
   final String month;
@@ -338,6 +397,8 @@ class ImmersiveEventCard extends StatelessWidget {
   final int participants;
   final bool isJoined;
   final List<String> avatarUrls;
+  // DÜZELTME: onJoinTap parametresi tanımlandı
+  final VoidCallback onJoinTap;
 
   const ImmersiveEventCard({
     super.key,
@@ -354,6 +415,8 @@ class ImmersiveEventCard extends StatelessWidget {
     required this.participants,
     required this.isJoined,
     required this.avatarUrls,
+    // DÜZELTME: Constructor'a eklendi
+    required this.onJoinTap,
   });
 
   @override
@@ -559,7 +622,7 @@ class ImmersiveEventCard extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // SOL TARAF: Katılanlar (Taşmayı önlemek için Expanded)
+                      // SOL TARAF: Katılanlar
                       Expanded(
                         child: Row(
                           children: [
@@ -569,9 +632,9 @@ class ImmersiveEventCard extends StatelessWidget {
                             ],
                             Flexible(
                               child: Text(
-                                avatarUrls.isEmpty
+                                avatarUrls.isEmpty && participants == 0
                                     ? 'İLK SEN KATIL'
-                                    : '+${participants > 3 ? participants - 3 : 0} GİDİYOR',
+                                    : '+${participants > 3 ? participants - 3 : participants} GİDİYOR',
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w800,
@@ -587,9 +650,9 @@ class ImmersiveEventCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
 
-                      // SAĞ TARAF: Buton
+                      // SAĞ TARAF: Buton (DÜZELTME: onJoinTap buraya bağlandı)
                       InkWell(
-                        onTap: () => HapticFeedback.lightImpact(),
+                        onTap: onJoinTap,
                         borderRadius: BorderRadius.circular(30),
                         child: Container(
                           padding: const EdgeInsets.symmetric(

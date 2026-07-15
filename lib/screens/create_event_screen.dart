@@ -3,12 +3,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../models/event_type.dart';
 import '../services/event_repository.dart';
 import '../theme/app_theme.dart';
 
 class EventCreateScreen extends StatefulWidget {
-  // Gerçek projede aktif kullanıcının strava_id'si buraya parametre veya state management üzerinden gelmeli.
   final int currentStravaId;
 
   const EventCreateScreen({super.key, required this.currentStravaId});
@@ -29,6 +30,9 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
   String? _distance;
   String? _pace;
 
+  // YENİ EKLENEN DEĞİŞKEN: Haritadan seçilen koordinat
+  LatLng? _pickedLocation;
+
   EventType _selectedType = EventType.socialRun;
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
@@ -39,8 +43,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality:
-          80, // Depolama tasarrufu ve hızlı yükleme için kaliteyi optimize ediyoruz
+      imageQuality: 80,
     );
 
     if (pickedFile != null) {
@@ -89,6 +92,20 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
     }
   }
 
+  // YENİ EKLENEN FONKSİYON: Harita ekranını açar ve sonucu bekler
+  Future<void> _openMapPicker() async {
+    final LatLng? result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const MapPickerScreen()),
+    );
+
+    if (result != null) {
+      setState(() {
+        _pickedLocation = result;
+      });
+    }
+  }
+
   void _showError(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -116,6 +133,12 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
       return;
     }
 
+    // YENİ EKLENEN KONTROL: Harita seçimi zorunlu kılındı
+    if (_pickedLocation == null) {
+      _showError('Lütfen harita üzerinden bir başlangıç noktası seçin.');
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -137,7 +160,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
         _selectedTime!.minute,
       );
 
-      // 3. Veritabanına Kaydet
+      // 3. Veritabanına Kaydet (Koordinatlar eklendi)
       await _repository.createEvent(
         title: _title!,
         type: _selectedType,
@@ -147,6 +170,8 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
         pace: _pace,
         coverImageUrl: coverUrl,
         stravaId: widget.currentStravaId,
+        lat: _pickedLocation!.latitude,
+        lng: _pickedLocation!.longitude,
       );
 
       if (!mounted) return;
@@ -159,7 +184,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
         ),
       );
 
-      Navigator.pop(context); // İşlem bitince listeye geri dön
+      Navigator.pop(context);
     } catch (e) {
       _showError(e.toString());
     } finally {
@@ -193,7 +218,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
             key: _formKey,
             child: ListView(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.only(bottom: 120), // Buton için boşluk
+              padding: const EdgeInsets.only(bottom: 120),
               children: [
                 _buildImagePicker(),
                 const SizedBox(height: 24),
@@ -219,16 +244,62 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
                   children: [
                     _buildDateTimeRow(),
                     const Divider(color: Colors.white10, height: 1),
+
+                    // Lokasyon Metin Alanı
                     _buildTextField(
-                      label: 'Buluşma Noktası',
+                      label: 'Buluşma Noktası (Metin)',
                       hint: 'Örn: Bebek Starbucks Önü',
-                      icon: Icons.location_on_rounded,
+                      icon: Icons.location_city_rounded,
                       onSaved: (val) => _location = val,
                       validator:
                           (val) =>
                               val == null || val.trim().isEmpty
-                                  ? 'Konum zorunludur'
+                                  ? 'Konum ismi zorunludur'
                                   : null,
+                    ),
+                    const Divider(color: Colors.white10, height: 1),
+
+                    // YENİ EKLENEN UI: Harita Seçici Butonu
+                    InkWell(
+                      onTap: _openMapPicker,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _pickedLocation != null
+                                  ? Icons.check_circle_rounded
+                                  : Icons.map_rounded,
+                              color:
+                                  _pickedLocation != null
+                                      ? const Color(0xFF34C759)
+                                      : Colors.white.withValues(alpha: 0.5),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _pickedLocation != null
+                                    ? 'Konum Haritadan Seçildi'
+                                    : 'Haritadan Konum Seç (Zorunlu)',
+                                style: TextStyle(
+                                  color:
+                                      _pickedLocation != null
+                                          ? Colors.white
+                                          : Colors.white.withValues(alpha: 0.7),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color: Colors.white.withValues(alpha: 0.3),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -255,7 +326,6 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
             ),
           ),
 
-          // Alt kısımdaki sabit kaydet butonu ve loading overlay
           if (_isLoading)
             Container(
               color: Colors.black.withValues(alpha: 0.5),
@@ -289,7 +359,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
                     child: ElevatedButton(
                       onPressed: _submitForm,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.yrcSoftBlue, // Neon Turuncu
+                        backgroundColor: AppColors.yrcSoftBlue,
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(100),
@@ -461,7 +531,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
                 if (selected) setState(() => _selectedType = type);
               },
               backgroundColor: Colors.white.withValues(alpha: 0.05),
-              selectedColor: AppColors.yrcSoftBlue, // Neon Turuncu
+              selectedColor: AppColors.yrcSoftBlue,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(100),
                 side: BorderSide(
@@ -580,6 +650,131 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ==============================================================
+// YENİ EKLENEN SINIF: Tam Ekran Harita Seçici
+// ==============================================================
+class MapPickerScreen extends StatefulWidget {
+  const MapPickerScreen({super.key});
+
+  @override
+  State<MapPickerScreen> createState() => _MapPickerScreenState();
+}
+
+class _MapPickerScreenState extends State<MapPickerScreen> {
+  // Başlangıç noktasını doğrudan Yıldız / Beşiktaş bölgesine odaklıyoruz.
+  final LatLng _initialCenter = const LatLng(41.0422, 29.0083);
+  LatLng? _selectedMarker;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.yrcBackground,
+      appBar: AppBar(
+        backgroundColor: AppColors.yrcBackground,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text(
+          'Konum İşaretle',
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+        ),
+      ),
+      body: Stack(
+        children: [
+          FlutterMap(
+            options: MapOptions(
+              initialCenter: _initialCenter,
+              initialZoom: 14.0,
+              onTap: (tapPosition, point) {
+                setState(() {
+                  _selectedMarker = point;
+                });
+              },
+            ),
+            children: [
+              TileLayer(
+                // Tamamen ücretsiz ve anahtarsız OpenStreetMap katmanı
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.yrccore.app',
+              ),
+              if (_selectedMarker != null)
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: _selectedMarker!,
+                      width: 50,
+                      height: 50,
+                      alignment:
+                          Alignment
+                              .topCenter, // Pinin ucunun tam noktaya denk gelmesi için
+                      child: const Icon(
+                        Icons.location_on,
+                        color: Colors.redAccent,
+                        size: 50,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+
+          // Ekranda yönlendirici bir bilgi mesajı
+          if (_selectedMarker == null)
+            Positioned(
+              top: 20,
+              left: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Text(
+                  'Buluşma noktasını işaretlemek için haritada bir yere dokunun.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+
+          // Seçim yapıldıysa Onay Butonu çıkar
+          if (_selectedMarker != null)
+            Positioned(
+              bottom: 40,
+              left: 24,
+              right: 24,
+              child: ElevatedButton(
+                onPressed: () {
+                  // Seçilen koordinatı bir önceki ekrana (forma) döndür
+                  Navigator.pop(context, _selectedMarker);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.yrcSoftBlue,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  elevation: 10,
+                ),
+                child: const Text(
+                  'KONUMU ONAYLA',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

@@ -215,12 +215,103 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           });
         }
       } else {
+        // --- YRC ETKİNLİKLERİ SIRALAMASI (SADECE CHECKED_IN OLANLAR) ---
         if (mounted) {
           setState(() {
             _runners = [];
             _totalParticipants = 0;
             _totalClubDistance = 0.0;
-            _currentState = LeaderboardState.empty;
+            // Yüklenme animasyonunu başlat
+            _currentState = LeaderboardState.loading;
+          });
+        }
+
+        // Sadece yrc_leaderboard_ranked view'ından verileri çekiyoruz
+        final List<dynamic> topYrcRunnersData = await supabase
+            .from('yrc_leaderboard_ranked')
+            .select()
+            .order('real_rank', ascending: true)
+            .limit(30);
+
+        List<RunnerRank> fetchedYrcRunners = [];
+        double totalYrcKm = 0.0;
+        bool isMeInTop30 = false;
+        RunnerRank? myYrcData;
+
+        for (int i = 0; i < topYrcRunnersData.length; i++) {
+          final row = topYrcRunnersData[i];
+          double distanceKm =
+              double.tryParse(row['total_distance_km']?.toString() ?? '0') ??
+              0.0;
+          int totalSeconds =
+              int.tryParse(
+                row['total_moving_time_seconds']?.toString() ?? '0',
+              ) ??
+              0;
+          int runsCount =
+              int.tryParse(row['runs_count']?.toString() ?? '0') ?? 0;
+          int realRank =
+              int.tryParse(row['real_rank']?.toString() ?? '0') ?? (i + 1);
+
+          totalYrcKm += distanceKm;
+
+          String formattedPace = '--:--';
+          if (distanceKm > 0 && totalSeconds > 0) {
+            int paceSeconds = (totalSeconds / distanceKm).round();
+            formattedPace =
+                '${paceSeconds ~/ 60}:${(paceSeconds % 60).toString().padLeft(2, '0')}';
+          }
+
+          String firstName = row['first_name']?.toString() ?? '';
+          String lastName = row['last_name']?.toString() ?? '';
+          String finalName = '$firstName $lastName'.trim();
+          if (finalName.isEmpty) finalName = 'YRC Koşucusu';
+
+          String rawAvatar =
+              (row['avatar_url'] ?? row['profile_url'] ?? '').toString();
+          String finalAvatar =
+              rawAvatar.isNotEmpty
+                  ? rawAvatar
+                  : 'https://ui-avatars.com/api/?name=${Uri.encodeComponent(finalName)}&background=82B1F2&color=fff';
+
+          int? rowStravaId = int.tryParse(row['strava_id']?.toString() ?? '');
+          bool isMe = (myStravaId != null && rowStravaId == myStravaId);
+          if (isMe) isMeInTop30 = true;
+
+          final runnerObj = RunnerRank(
+            rank: realRank,
+            name: finalName,
+            avatarUrl: finalAvatar,
+            distanceKm: distanceKm,
+            avgPace: formattedPace,
+            runsCount: runsCount,
+            isCurrentUser: isMe,
+          );
+
+          fetchedYrcRunners.add(runnerObj);
+          if (isMe) myYrcData = runnerObj;
+        }
+
+        // YRC sıralamasında tüm katılımcı sayısını al
+        final yrcCountResponse = await supabase
+            .from('yrc_leaderboard_ranked')
+            .select('strava_id')
+            .count(CountOption.exact);
+
+        if (mounted) {
+          setState(() {
+            _runners = fetchedYrcRunners;
+            _totalParticipants = yrcCountResponse.count;
+            _totalClubDistance = totalYrcKm;
+
+            if (!isMeInTop30 && myYrcData != null) {
+              _runners.add(myYrcData);
+            }
+
+            _currentState =
+                _runners.isEmpty
+                    ? LeaderboardState.empty
+                    : LeaderboardState.loaded;
           });
         }
       }

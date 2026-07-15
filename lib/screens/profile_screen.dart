@@ -6,6 +6,7 @@ import '../widgets/half_circle_progress.dart'; // Yeni Eklenen
 import '../widgets/profile_stat_cards.dart'; // Yeni Eklenen
 import 'login_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/event_repository.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -164,6 +165,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         await StravaService().syncRecentActivities(
           userData['access_token'],
           userData['strava_id'],
+        );
+        await EventRepository().validatePendingEvents(
+          userData['strava_id'],
+          userData['access_token'],
         );
       }
     } catch (e) {
