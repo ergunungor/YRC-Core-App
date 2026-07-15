@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:ui'; // Glassmorphism efekti için
 import 'package:intl/intl.dart'; // Tarih formatlama için
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'create_event_screen.dart';
 import '../services/event_repository.dart';
 import '../models/event_type.dart';
@@ -138,6 +138,29 @@ class _EventsScreenState extends State<EventsScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Kullanıcı bilgisi bulunamadı.'),
+                    ),
+                  );
+                  return;
+                }
+
+                // YENİ: Pacer/Admin kontrolü
+                final userRow =
+                    await Supabase.instance.client
+                        .from('users')
+                        .select('role')
+                        .eq('strava_id', stravaId)
+                        .maybeSingle();
+
+                final String role = userRow?['role'] as String? ?? 'user';
+
+                if (!context.mounted) return;
+
+                if (role != 'pacer' && role != 'admin') {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Etkinlik oluşturmak için Pacer rütbesine sahip olmalısınız.',
+                      ),
                     ),
                   );
                   return;

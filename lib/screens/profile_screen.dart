@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/shimmer_loading.dart';
 import '../services/strava_service.dart';
+import '../services/pacer_service.dart';
 import '../widgets/half_circle_progress.dart'; // Yeni Eklenen
 import '../widgets/profile_stat_cards.dart'; // Yeni Eklenen
 import 'login_screen.dart';
@@ -23,6 +24,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   final Color neonBlue = const Color(0xFF82B1F2);
   final Color cardColor = const Color(0xFF0A121F);
 
+  final PacerService _pacerService = PacerService();
+
   // --- DİNAMİK VERİ DEĞİŞKENLERİ ---
   String _avatarUrl = '';
   String _fullName = 'YÜKLENİYOR...';
@@ -34,6 +37,11 @@ class _ProfileScreenState extends State<ProfileScreen>
   String _avgPace = '--:-- /km';
   String _totalDuration = '--s --d';
   bool _isLoading = true;
+
+  // YENİ: Pacer rütbesi ve başvuru durumu
+  String _myRole = 'user'; // 'user' | 'pacer' | 'admin'
+  String? _pacerApplicationStatus; // null | 'pending' | 'approved' | 'rejected'
+  bool _isApplyingForPacer = false;
 
   @override
   void initState() {
@@ -70,7 +78,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           await supabase
               .from('users')
               .select(
-                'first_name, last_name, profile_url, strava_id, weekly_goal, avatar_url',
+                'first_name, last_name, profile_url, strava_id, weekly_goal, avatar_url, role',
               )
               .eq('strava_id', myStravaId)
               .maybeSingle();
@@ -124,6 +132,17 @@ class _ProfileScreenState extends State<ProfileScreen>
             '${paceSeconds ~/ 60}:${(paceSeconds % 60).toString().padLeft(2, '0')}';
       }
 
+      // YENİ: Rol bilgisini oku
+      final String role = userData['role'] as String? ?? 'user';
+
+      // YENİ: Eğer henüz pacer/admin değilse, en son başvurusunun durumunu çek
+      String? applicationStatus;
+      if (role != 'pacer' && role != 'admin') {
+        applicationStatus = await _pacerService.getMyLatestApplicationStatus(
+          myStravaId,
+        );
+      }
+
       if (mounted) {
         setState(() {
           _avatarUrl = userData['avatar_url'] ?? userData['profile_url'] ?? '';
@@ -136,6 +155,8 @@ class _ProfileScreenState extends State<ProfileScreen>
           _avgPace = '$calculatedPace /km';
           _totalDuration =
               '${totalSeconds ~/ 3600}s ${(totalSeconds % 3600) ~/ 60}d';
+          _myRole = role;
+          _pacerApplicationStatus = applicationStatus;
           _isLoading = false;
         });
       }
@@ -166,12 +187,40 @@ class _ProfileScreenState extends State<ProfileScreen>
           userData['access_token'],
           userData['strava_id'],
         );
-        await EventRepository().runEventBasedVerification(
+        await EventRepository().validatePendingEvents(
           userData['strava_id'],
+          userData['access_token'],
         );
       }
     } catch (e) {
       debugPrint('Sessiz senkronizasyon sırasında hata: $e');
+    }
+  }
+
+  // YENİ: Pacer'a başvuru fonksiyonu
+  Future<void> _applyForPacer() async {
+    if (_myStravaId == null) return;
+
+    setState(() => _isApplyingForPacer = true);
+
+    try {
+      await _pacerService.applyForPacer(_myStravaId!);
+      if (mounted) {
+        setState(() {
+          _pacerApplicationStatus = 'pending';
+          _isApplyingForPacer = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pacer başvurun alındı! 🎉')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isApplyingForPacer = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
     }
   }
 
@@ -215,26 +264,6 @@ class _ProfileScreenState extends State<ProfileScreen>
               child: SkeletonBox(width: 240, height: 125, borderRadius: 62),
             ),
             const SizedBox(height: 40),
-            const Row(
-              children: [
-                Expanded(
-                  child: SkeletonBox(
-                    width: double.infinity,
-                    height: 96,
-                    borderRadius: 20,
-                  ),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: SkeletonBox(
-                    width: double.infinity,
-                    height: 96,
-                    borderRadius: 20,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
             const Row(
               children: [
                 Expanded(
@@ -412,6 +441,81 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  // YENİ: Pacer başvuru butonu / durum göstergesi
+  Widget _buildPacerApplicationSection() {
+    // Zaten pacer veya admin ise hiçbir şey gösterme
+    if (_myRole == 'pacer' || _myRole == 'admin') {
+      return const SizedBox.shrink();
+    }
+
+    // Bekleyen bir başvurusu varsa durum göster
+    if (_pacerApplicationStatus == 'pending') {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white.withAlpha(15),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withAlpha(30)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.hourglass_top_rounded,
+              color: Colors.white70,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              'Pacer Başvurun İnceleniyor',
+              style: TextStyle(
+                color: Colors.white70,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Başvuru yok veya reddedilmiş: başvuru butonu göster
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: _isApplyingForPacer ? null : _applyForPacer,
+        icon:
+            _isApplyingForPacer
+                ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.black,
+                  ),
+                )
+                : const Icon(Icons.emoji_events_rounded, color: Colors.black),
+        label: Text(
+          _pacerApplicationStatus == 'rejected'
+              ? 'Tekrar Pacer\'lığa Başvur'
+              : 'Pacer mısın? Tıkla ve hemen hesabını onaylat!',
+          style: const TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: nikeVolt,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildProfileContent(double progress) {
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -447,7 +551,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                   ),
                   Text(
-                    'YRC | Pacer',
+                    _myRole == 'pacer'
+                        ? 'YRC | Pacer'
+                        : _myRole == 'admin'
+                        ? 'YRC | Admin'
+                        : 'YRC | Üye',
                     style: TextStyle(
                       color: stravaOrange,
                       fontSize: 14,
@@ -458,7 +566,9 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
             ],
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 16),
+          _buildPacerApplicationSection(),
+          const SizedBox(height: 24),
           Center(
             child: SizedBox(
               width: 240,
