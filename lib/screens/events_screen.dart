@@ -293,6 +293,7 @@ class _EventsScreenState extends State<EventsScreen> {
               HapticFeedback.mediumImpact();
             } // Mevcut catch bloğunu bununla değiştir
             catch (e) {
+              // ignore: avoid_print
               print('🚨 SUPABASE KATILIM HATASI: $e'); // Terminalde görmek için
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(

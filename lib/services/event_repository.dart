@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/event_type.dart';
 import 'strava_service.dart';
 import 'activity_validator_service.dart';
+import 'event_activity_matcher_service.dart';
 
 /// Event işlemlerinden sorumlu Repository sınıfı.
 /// Veritabanı (Database) ve Depolama (Storage) işlemleri burada izole edilmiştir.
@@ -157,6 +158,7 @@ class EventRepository {
   }
 
   // --- 5. AŞAMA: OTOMATİK STRAVA DOĞRULAMA (ORKESTRATÖR) ---
+  // (ESKİ MİMARİ - "son aktiviteyi getir" mantığı. Değiştirilmedi, korunuyor.)
 
   /// Kullanıcının son koşusunu çeker, etkinlik saati ve konumuyla kıyaslar,
   /// eşleşirse durumunu 'checked_in' yapar.
@@ -194,7 +196,6 @@ class EventRepository {
         eventLng: eventLng,
       );
 
-      // 4. İki şart da sağlanıyorsa durumu 'checked_in' (Doğrulandı) yap
       // 4. İki şart da sağlanıyorsa durumu 'checked_in' (Doğrulandı) yap ve aktiviteyi bağla
       if (isLocValid) {
         await _supabase
@@ -215,6 +216,7 @@ class EventRepository {
   }
 
   // --- 6. AŞAMA: PROFİL YENİLENDİĞİNDE BEKLEYEN ETKİNLİKLERİ DOĞRULA ---
+  // (ESKİ MİMARİ. Değiştirilmedi, korunuyor.)
   Future<void> validatePendingEvents(int stravaId, String accessToken) async {
     try {
       // 1. Kullanıcının 'joined' statüsünde olduğu etkinlikleri buluyoruz.
@@ -246,6 +248,151 @@ class EventRepository {
       }
     } catch (e) {
       print('🚨 Bekleyen etkinlikler doğrulanırken hata: $e');
+    }
+  }
+
+  // --- 7. AŞAMA: YENİ MİMARİ - EVENT BAZLI AKTİVİTE EŞLEŞTİRME ---
+  //
+  // "Son aktiviteyi getir" mantığı YOKTUR. Kullanıcının 'joined' olduğu
+  // tüm eventler güne göre gruplanır, her gün için o güne ait TÜM
+  // aktiviteler çekilir ve EventActivityMatcherService ile 1-e-1,
+  // en-yakın-saat kuralına göre eşleştirilir.
+  Future<void> runEventBasedVerification(int stravaId) async {
+    try {
+      // 1. Kullanıcının 'joined' statüsündeki eventlerini getir.
+      final pendingRows = await _supabase
+          .from('event_participants')
+          .select('id, event_id, events!inner(date, lat, lng)')
+          .match({'strava_id': stravaId, 'status': 'joined'});
+
+      if (pendingRows.isEmpty) return;
+
+      // 2. Eventleri takvim gününe göre grupla (Senaryo 1/3/4/8: aynı gün birden fazla event).
+      final Map<String, List<Map<String, dynamic>>> eventsByDay = {};
+
+      for (final row in pendingRows) {
+        final event = row['events'];
+        final DateTime eventDateUtc = DateTime.parse(event['date']).toUtc();
+        final String dayKey =
+            '${eventDateUtc.year}-${eventDateUtc.month}-${eventDateUtc.day}';
+
+        eventsByDay.putIfAbsent(dayKey, () => []).add({
+          'participant_id': row['id'],
+          'event_id': row['event_id'],
+          'date': event['date'],
+          'lat': event['lat'] != null ? (event['lat'] as num).toDouble() : 0.0,
+          'lng': event['lng'] != null ? (event['lng'] as num).toDouble() : 0.0,
+        });
+      }
+
+      final stravaService = StravaService();
+      final matcher = EventActivityMatcherService();
+
+      // 3. Her gün grubu için ayrı ayrı eşleştirme yap.
+      for (final dayEvents in eventsByDay.values) {
+        final DateTime referenceDate = DateTime.parse(dayEvents.first['date']);
+
+        // O güne ait TÜM aktiviteleri getir (sadece son aktivite değil).
+        final activities = await stravaService.getActivitiesForDay(
+          stravaId: stravaId,
+          eventDate: referenceDate,
+        );
+
+        if (activities.isEmpty) {
+          await _markExpiredAsMissed(dayEvents);
+          continue;
+        }
+
+        // 4. Daha önce BAŞKA bir evente 'checked_in' olarak atanmış aktiviteleri
+        // havuzdan çıkar (bir aktivite sadece bir evente atanabilir kuralı,
+        // fonksiyon birden fazla kez çalışsa bile korunur).
+        final alreadyUsedRows = await _supabase
+            .from('event_participants')
+            .select('activity_id')
+            .eq('strava_id', stravaId)
+            .eq('status', 'checked_in')
+            .not('activity_id', 'is', null);
+
+        final Set<dynamic> usedActivityIds =
+            alreadyUsedRows.map((r) => r['activity_id']).toSet();
+
+        final availableActivities =
+            activities
+                .where((a) => !usedActivityIds.contains(a['activity_id']))
+                .toList();
+
+        if (availableActivities.isEmpty) {
+          await _markExpiredAsMissed(dayEvents);
+          continue;
+        }
+
+        // 5. Matcher'a uygun formatta gönder (event id -> String).
+        final matcherEvents =
+            dayEvents
+                .map(
+                  (e) => {
+                    'id': e['event_id'].toString(),
+                    'date': e['date'],
+                    'lat': e['lat'],
+                    'lng': e['lng'],
+                  },
+                )
+                .toList();
+
+        final matchResult = matcher.matchEventsToActivities(
+          events: matcherEvents,
+          activities: availableActivities,
+        );
+
+        // 6. Sonuçları veritabanına yaz.
+        for (final dayEvent in dayEvents) {
+          final String eventIdKey = dayEvent['event_id'].toString();
+          final dynamic assignedActivityId = matchResult[eventIdKey];
+
+          if (assignedActivityId != null) {
+            await _supabase
+                .from('event_participants')
+                .update({
+                  'status': 'checked_in',
+                  'activity_id': assignedActivityId,
+                })
+                .eq('id', dayEvent['participant_id']);
+
+            print(
+              '✅ Event ${dayEvent['event_id']} -> Aktivite $assignedActivityId ile eşleşti.',
+            );
+          } else {
+            await _markExpiredAsMissed([dayEvent]);
+          }
+        }
+      }
+    } catch (e) {
+      print('🚨 Event bazlı doğrulama sırasında hata: $e');
+    }
+  }
+
+  /// Yardımcı: Eşleşme bulunamayan eventlerden, zaman penceresi (saat + 45 dk
+  /// tolerans) çoktan kapanmış olanları 'missed' yapar. Pencere hâlâ açıksa
+  /// dokunmaz, çünkü aktivite henüz senkronize olmamış olabilir.
+  Future<void> _markExpiredAsMissed(
+    List<Map<String, dynamic>> dayEvents,
+  ) async {
+    final DateTime nowUtc = DateTime.now().toUtc();
+
+    for (final dayEvent in dayEvents) {
+      final DateTime eventDateUtc = DateTime.parse(dayEvent['date']).toUtc();
+      final bool windowClosed = nowUtc.isAfter(
+        eventDateUtc.add(const Duration(minutes: 45)),
+      );
+
+      if (windowClosed) {
+        await _supabase
+            .from('event_participants')
+            .update({'status': 'missed'})
+            .eq('id', dayEvent['participant_id']);
+
+        print('❌ Event ${dayEvent['event_id']} kaçırıldı olarak işaretlendi.');
+      }
     }
   }
 }

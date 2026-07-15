@@ -156,4 +156,43 @@ class StravaService {
       return null;
     }
   }
+
+  // --- YENİ: EVENT BAZLI EŞLEŞTİRME İÇİN GÜNÜN TÜM AKTİVİTELERİNİ ÇEKME ---
+  //
+  // Strava API'ye tekrar gitmiyor; syncRecentActivities ile zaten Supabase'e
+  // yazılmış "activities" tablosundan, event'in bulunduğu güne ait TÜM
+  // aktiviteleri (sadece son aktiviteyi değil) çeker.
+  Future<List<Map<String, dynamic>>> getActivitiesForDay({
+    required int stravaId,
+    required DateTime eventDate,
+  }) async {
+    try {
+      final DateTime eventDateUtc = eventDate.toUtc();
+
+      // Gün başlangıcından 3 saat öncesi, gün sonundan sonra 3 saat fazlası:
+      // gece yarısına yakın etkinlikler ve saat toleransı için güvenlik payı.
+      final DateTime windowStart = DateTime.utc(
+        eventDateUtc.year,
+        eventDateUtc.month,
+        eventDateUtc.day,
+      ).subtract(const Duration(hours: 3));
+
+      final DateTime windowEnd = windowStart.add(const Duration(hours: 30));
+
+      final response = await _supabase
+          .from('activities')
+          .select('activity_id, start_date, start_lat, start_lng')
+          .eq('strava_id', stravaId)
+          .gte('start_date', windowStart.toIso8601String())
+          .lte('start_date', windowEnd.toIso8601String())
+          .order('start_date', ascending: true);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print(
+        '🚨 Günün aktiviteleri getirilirken hata (getActivitiesForDay): $e',
+      );
+      return [];
+    }
+  }
 }
