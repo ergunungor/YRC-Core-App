@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'dart:ui';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -23,7 +23,8 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
   final EventRepository _repository = EventRepository();
 
   bool _isLoading = false;
-  File? _coverImage;
+  Uint8List? _coverImage;
+  String? _coverImageExtension;
 
   String? _title;
   String? _location;
@@ -47,7 +48,11 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
     );
 
     if (pickedFile != null) {
-      setState(() => _coverImage = File(pickedFile.path));
+      final bytes = await pickedFile.readAsBytes();
+      setState(() {
+        _coverImage = bytes;
+        _coverImageExtension = pickedFile.path.split('.').last;
+      });
     }
   }
 
@@ -145,7 +150,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
       _formKey.currentState!.save();
 
       // 1. Fotoğrafı Storage'a Yükle
-      final fileExtension = _coverImage!.path.split('.').last;
+      final fileExtension = _coverImageExtension ?? 'jpg';
       final String coverUrl = await _repository.uploadEventCoverImage(
         _coverImage!,
         fileExtension,
@@ -443,7 +448,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
           image:
               _coverImage != null
                   ? DecorationImage(
-                    image: FileImage(_coverImage!),
+                    image: MemoryImage(_coverImage!),
                     fit: BoxFit.cover,
                   )
                   : null,

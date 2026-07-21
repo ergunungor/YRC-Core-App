@@ -42,6 +42,12 @@ class _ProfileScreenState extends State<ProfileScreen>
   String _myRole = 'user'; // 'user' | 'pacer' | 'admin'
   String? _pacerApplicationStatus; // null | 'pending' | 'approved' | 'rejected'
   bool _isApplyingForPacer = false;
+  // YENİ: XP / Level sistemi
+  int _totalXp = 0;
+  int _currentLevel = 1;
+  int _currentLevelThreshold = 0;
+  int _nextLevelThreshold =
+      100; // sıfıra bölünmeyi engellemek için güvenli varsayılan
 
   @override
   void initState() {
@@ -160,6 +166,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           _isLoading = false;
         });
       }
+      await _fetchGamificationStats(myStravaId);
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -194,6 +201,58 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     } catch (e) {
       debugPrint('Sessiz senkronizasyon sırasında hata: $e');
+    }
+  }
+
+  Future<void> _fetchGamificationStats(int stravaId) async {
+    try {
+      final supabase = Supabase.instance.client;
+
+      final statsData =
+          await supabase
+              .from('user_gamification_stats')
+              .select('total_xp, current_level, last_seen_level')
+              .eq('strava_id', stravaId)
+              .maybeSingle();
+
+      if (statsData == null) return;
+
+      final int totalXp = (statsData['total_xp'] as num?)?.toInt() ?? 0;
+      final int currentLevel =
+          (statsData['current_level'] as num?)?.toInt() ?? 1;
+
+      final currentThresholdData =
+          await supabase
+              .from('level_thresholds')
+              .select('required_xp')
+              .eq('level', currentLevel)
+              .maybeSingle();
+
+      final nextThresholdData =
+          await supabase
+              .from('level_thresholds')
+              .select('required_xp')
+              .eq('level', currentLevel + 1)
+              .maybeSingle();
+
+      final int currentThreshold =
+          (currentThresholdData?['required_xp'] as num?)?.toInt() ?? 0;
+      // Zaten max level'daysa (level 10), bir üst eşik yok — bar'ı dolu göstermek için
+      // güvenli bir değer kullanıyoruz (mevcut eşiğin biraz üstü).
+      final int nextThreshold =
+          (nextThresholdData?['required_xp'] as num?)?.toInt() ??
+          (currentThreshold + 1);
+
+      if (mounted) {
+        setState(() {
+          _totalXp = totalXp;
+          _currentLevel = currentLevel;
+          _currentLevelThreshold = currentThreshold;
+          _nextLevelThreshold = nextThreshold;
+        });
+      }
+    } catch (e) {
+      debugPrint('Gamification verisi çekilemedi: $e');
     }
   }
 
@@ -516,6 +575,77 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  // YENİ: XP İlerleme Çubuğu
+  Widget _buildXpBar() {
+    final int xpIntoLevel = _totalXp - _currentLevelThreshold;
+    final int xpForLevel = _nextLevelThreshold - _currentLevelThreshold;
+    final double safeProgress =
+        xpForLevel > 0 ? (xpIntoLevel / xpForLevel).clamp(0.0, 1.0) : 1.0;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withAlpha(20)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'LEVEL $_currentLevel',
+                style: TextStyle(
+                  color: nikeVolt,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              Text(
+                '$_totalXp / $_nextLevelThreshold XP',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Stack(
+            children: [
+              Container(
+                height: 8,
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              FractionallySizedBox(
+                widthFactor: safeProgress,
+                child: Container(
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: nikeVolt,
+                    borderRadius: BorderRadius.circular(4),
+                    boxShadow: [
+                      BoxShadow(color: nikeVolt.withAlpha(100), blurRadius: 8),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProfileContent(double progress) {
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -566,6 +696,8 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
             ],
           ),
+          const SizedBox(height: 16),
+          _buildXpBar(),
           const SizedBox(height: 16),
           _buildPacerApplicationSection(),
           const SizedBox(height: 24),

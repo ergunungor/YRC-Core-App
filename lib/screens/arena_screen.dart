@@ -25,6 +25,24 @@ class ScoreRank {
   });
 }
 
+class BountyItem {
+  final int id;
+  final String title;
+  final String description;
+  final int rewardXp;
+  final double progress; // 0.0 - 1.0 arası, görsel amaçlı
+  final bool isCompleted; // backend'deki gerçek tamamlanma durumu
+
+  BountyItem({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.rewardXp,
+    required this.progress,
+    required this.isCompleted,
+  });
+}
+
 class ArenaScreen extends StatefulWidget {
   const ArenaScreen({super.key});
 
@@ -34,6 +52,7 @@ class ArenaScreen extends StatefulWidget {
 
 class _ArenaScreenState extends State<ArenaScreen> {
   List<ScoreRank> _currentPodium = [];
+  List<BountyItem> _bounties = [];
   bool _isLoading = true;
 
   int _myRank = 0;
@@ -84,6 +103,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
                 (statsData['total_elevation'] as num?)?.toDouble() ?? 0.0;
             _hasRunThisWeek = _activeDays > 0;
           });
+          await _fetchBounties(myStravaId);
         }
       } else {
         print(
@@ -176,6 +196,73 @@ class _ArenaScreenState extends State<ArenaScreen> {
     }
   }
 
+  Future<void> _fetchBounties(int stravaId) async {
+    try {
+      final supabase = Supabase.instance.client;
+
+      // Postgres'teki date_trunc('week', now()) ile aynı mantık: haftanın Pazartesi'si
+      final now = DateTime.now();
+      final weekStart = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: now.weekday - 1));
+
+      final definitions = await supabase
+          .from('bounty_definitions')
+          .select()
+          .eq('is_active', true);
+
+      final completions = await supabase
+          .from('user_bounty_completions')
+          .select('bounty_id')
+          .eq('strava_id', stravaId)
+          .eq('week_start', weekStart.toIso8601String().split('T').first);
+
+      final completedIds =
+          (completions as List).map((c) => c['bounty_id'] as int).toSet();
+
+      final List<BountyItem> fetched =
+          (definitions as List).map((d) {
+            final metricType = d['metric_type'] as String;
+            final targetValue = (d['target_value'] as num).toDouble();
+
+            double currentValue;
+            switch (metricType) {
+              case 'distance_km':
+                currentValue = _totalDist;
+                break;
+              case 'elevation':
+                currentValue = _totalElev;
+                break;
+              case 'active_days':
+                currentValue = _activeDays;
+                break;
+              default:
+                currentValue = 0.0;
+            }
+
+            final bountyId = d['id'] as int;
+            final isCompleted = completedIds.contains(bountyId);
+
+            return BountyItem(
+              id: bountyId,
+              title: d['title'] as String,
+              description: d['description'] as String,
+              rewardXp: d['reward_xp'] as int,
+              progress: isCompleted ? 1.0 : (currentValue / targetValue),
+              isCompleted: isCompleted,
+            );
+          }).toList();
+
+      if (mounted) {
+        setState(() => _bounties = fetched);
+      }
+    } catch (e) {
+      debugPrint('Bounty verisi çekilemedi: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -207,11 +294,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
 
                 // Görev kartlarımıza SQL'den çektiğimiz canlı verileri paslıyoruz (Pass-down)
                 SliverToBoxAdapter(
-                  child: ArenaBountiesList(
-                    activeDays: _activeDays.toInt(), // Widget int bekliyor
-                    totalElev: _totalElev,
-                    totalDist: _totalDist,
-                  ),
+                  child: ArenaBountiesList(bounties: _bounties),
                 ),
                 // --- YENİ EKLENEN KISIM BİTİŞİ ---
                 const SliverToBoxAdapter(child: SizedBox(height: 60)),

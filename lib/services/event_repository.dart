@@ -1,6 +1,5 @@
 // ignore_for_file: avoid_print
-
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/event_type.dart';
 import 'strava_service.dart';
@@ -18,8 +17,9 @@ class EventRepository {
   static const String _bucketName = 'events';
 
   /// 1. AŞAMA: Fotoğrafı Supabase Storage'a yükler ve Public URL'sini döndürür.
+  /// Uint8List kullanıyoruz çünkü bu hem Web hem Mobil'de çalışır (dart:io File web'de çalışmaz).
   Future<String> uploadEventCoverImage(
-    File imageFile,
+    Uint8List imageBytes,
     String fileExtension,
   ) async {
     try {
@@ -28,9 +28,9 @@ class EventRepository {
 
       await _supabase.storage
           .from(_bucketName)
-          .upload(
+          .uploadBinary(
             fileName,
-            imageFile,
+            imageBytes,
             fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
           );
 

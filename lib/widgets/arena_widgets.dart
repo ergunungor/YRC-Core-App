@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart'; // YENİ: Tek Doğruluk Kaynağımız
+import '../screens/arena_screen.dart';
 
 // --- 1. DİNAMİK MİKRO REKABET (DURUM) KARTI ---
 class ArenaStatusCard extends StatelessWidget {
@@ -115,50 +116,41 @@ class ArenaStatusCard extends StatelessWidget {
 
 // --- 2. DİNAMİK HAFTALIK GÖREVLER (BOUNTIES) LİSTESİ ---
 class ArenaBountiesList extends StatelessWidget {
-  final int activeDays; // Kaç gün koştu
-  final double totalElev; // Kaç metre tırmandı
-  final double totalDist; // Toplam kaç km koştu
+  final List<BountyItem> bounties;
 
-  const ArenaBountiesList({
-    super.key,
-    required this.activeDays,
-    required this.totalElev,
-    required this.totalDist,
-  });
+  const ArenaBountiesList({super.key, required this.bounties});
 
   @override
   Widget build(BuildContext context) {
+    if (bounties.isEmpty) {
+      return const SizedBox(height: 0);
+    }
+
     return SizedBox(
       height: 220, // İlerleme çubuğu sığsın diye boyutu bir tık büyüttük
       child: ListView(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: [
-          BountyCard(
-            title: "İstikrar Aslanı",
-            description: "Bu hafta 3 farklı günde aktivite kaydet.",
-            points: "+50 PTS",
-            icon: Icons.calendar_month_rounded,
-            progress: activeDays / 3.0, // Hedef: 3 Gün
-          ),
-          BountyCard(
-            title: "Yüksek İrtifa",
-            description: "Bu hafta toplam +200m irtifa kazanımına ulaş.",
-            points: "+100 PTS",
-            icon: Icons.terrain_rounded,
-            progress: totalElev / 200.0, // Hedef: 200 Metre
-          ),
-          BountyCard(
-            title: "KM Canavarı",
-            description: "Hafta bitmeden toplam 15KM barajını aş.",
-            points: "+75 PTS",
-            icon: Icons.route_rounded,
-            progress: totalDist / 15.0, // Hedef: 15 KM
-          ),
-        ],
+        children:
+            bounties.map((b) {
+              return BountyCard(
+                title: b.title,
+                description: b.description,
+                points: "+${b.rewardXp} PTS",
+                icon: _iconForBounty(b.title),
+                progress: b.progress,
+              );
+            }).toList(),
       ),
     );
+  }
+
+  IconData _iconForBounty(String title) {
+    if (title.contains("İstikrar")) return Icons.calendar_month_rounded;
+    if (title.contains("İrtifa")) return Icons.terrain_rounded;
+    if (title.contains("KM")) return Icons.route_rounded;
+    return Icons.emoji_events_rounded;
   }
 }
 
