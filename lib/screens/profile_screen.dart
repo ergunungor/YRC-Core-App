@@ -237,11 +237,12 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       final int currentThreshold =
           (currentThresholdData?['required_xp'] as num?)?.toInt() ?? 0;
-      // Zaten max level'daysa (level 10), bir üst eşik yok — bar'ı dolu göstermek için
-      // güvenli bir değer kullanıyoruz (mevcut eşiğin biraz üstü).
       final int nextThreshold =
           (nextThresholdData?['required_xp'] as num?)?.toInt() ??
           (currentThreshold + 1);
+
+      final int lastSeenLevel =
+          (statsData['last_seen_level'] as num?)?.toInt() ?? 1;
 
       if (mounted) {
         setState(() {
@@ -250,9 +251,209 @@ class _ProfileScreenState extends State<ProfileScreen>
           _currentLevelThreshold = currentThreshold;
           _nextLevelThreshold = nextThreshold;
         });
+
+        if (currentLevel > lastSeenLevel) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _showLevelUpDialog(currentLevel, stravaId);
+          });
+        }
       }
     } catch (e) {
       debugPrint('Gamification verisi çekilemedi: $e');
+    }
+  }
+
+  void _showLevelUpDialog(int newLevel, int stravaId) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: nikeVolt.withAlpha(80), width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: nikeVolt.withAlpha(60),
+                  blurRadius: 30,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.emoji_events_rounded, color: nikeVolt, size: 56),
+                const SizedBox(height: 16),
+                Text(
+                  'LEVEL ATLADIN!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 2.0,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'LEVEL $newLevel',
+                  style: TextStyle(
+                    color: nikeVolt,
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                    shadows: [
+                      Shadow(color: nikeVolt.withAlpha(100), blurRadius: 12),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      Navigator.of(context).pop();
+                      await _showBadgeUnlockDialog(newLevel, stravaId);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: nikeVolt,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: const Text(
+                      'DEVAM ET',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showBadgeUnlockDialog(int newLevel, int stravaId) async {
+    String badgeName = 'Yeni Rozet';
+    try {
+      final badgeData =
+          await Supabase.instance.client
+              .from('level_badges')
+              .select('badge_name')
+              .eq('level', newLevel)
+              .maybeSingle();
+      if (badgeData != null && badgeData['badge_name'] != null) {
+        badgeName = badgeData['badge_name'] as String;
+      }
+    } catch (e) {
+      debugPrint('Rozet bilgisi çekilemedi: $e');
+    }
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: nikeVolt.withAlpha(80), width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: nikeVolt.withAlpha(60),
+                  blurRadius: 30,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'YENİ ROZET AÇILDI!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 2.0,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Image.asset(
+                  'assets/images/badges/level_$newLevel.png',
+                  width: 140,
+                  height: 140,
+                  errorBuilder:
+                      (context, error, stackTrace) => Icon(
+                        Icons.military_tech_rounded,
+                        color: nikeVolt,
+                        size: 100,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  badgeName,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: nikeVolt,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      Navigator.of(context).pop();
+                      await _markLevelSeen(stravaId, newLevel);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: nikeVolt,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: const Text(
+                      'HARİKA!',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _markLevelSeen(int stravaId, int newLevel) async {
+    try {
+      await Supabase.instance.client
+          .from('user_gamification_stats')
+          .update({'last_seen_level': newLevel})
+          .eq('strava_id', stravaId);
+    } catch (e) {
+      debugPrint('last_seen_level güncellenemedi: $e');
     }
   }
 
@@ -575,6 +776,18 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  // YENİ: Sağ üst köşede statik rütbe rozeti
+  Widget _buildRankBadge() {
+    return Image.asset(
+      'assets/images/badges/level_$_currentLevel.png',
+      width: 44,
+      height: 44,
+      errorBuilder:
+          (context, error, stackTrace) =>
+              Icon(Icons.military_tech_rounded, color: nikeVolt, size: 32),
+    );
+  }
+
   // YENİ: XP İlerleme Çubuğu
   Widget _buildXpBar() {
     final int xpIntoLevel = _totalXp - _currentLevelThreshold;
@@ -654,46 +867,52 @@ class _ProfileScreenState extends State<ProfileScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              CircleAvatar(
-                radius: 30,
-                backgroundColor: stravaOrange,
-                child: CircleAvatar(
-                  radius: 28,
-                  backgroundImage: NetworkImage(
-                    _avatarUrl.isNotEmpty
-                        ? _avatarUrl
-                        : 'https://ui-avatars.com/api/?name=${_fullName.replaceAll(' ', '+')}&background=FC4C02&color=fff',
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
                 children: [
-                  Text(
-                    _fullName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.0,
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: stravaOrange,
+                    child: CircleAvatar(
+                      radius: 28,
+                      backgroundImage: NetworkImage(
+                        _avatarUrl.isNotEmpty
+                            ? _avatarUrl
+                            : 'https://ui-avatars.com/api/?name=${_fullName.replaceAll(' ', '+')}&background=FC4C02&color=fff',
+                      ),
                     ),
                   ),
-                  Text(
-                    _myRole == 'pacer'
-                        ? 'YRC | Pacer'
-                        : _myRole == 'admin'
-                        ? 'YRC | Admin'
-                        : 'YRC | Üye',
-                    style: TextStyle(
-                      color: stravaOrange,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  const SizedBox(width: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _fullName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      Text(
+                        _myRole == 'pacer'
+                            ? 'YRC | Pacer'
+                            : _myRole == 'admin'
+                            ? 'YRC | Admin'
+                            : 'YRC | Üye',
+                        style: TextStyle(
+                          color: stravaOrange,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
+              _buildRankBadge(),
             ],
           ),
           const SizedBox(height: 16),
