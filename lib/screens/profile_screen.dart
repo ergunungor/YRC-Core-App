@@ -194,9 +194,8 @@ class _ProfileScreenState extends State<ProfileScreen>
           userData['access_token'],
           userData['strava_id'],
         );
-        await EventRepository().validatePendingEvents(
+        await EventRepository().runEventBasedVerification(
           userData['strava_id'],
-          userData['access_token'],
         );
       }
     } catch (e) {
