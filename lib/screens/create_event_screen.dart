@@ -8,6 +8,9 @@ import 'package:latlong2/latlong.dart';
 import '../models/event_type.dart';
 import '../services/event_repository.dart';
 import '../theme/app_theme.dart';
+import '../services/nominatim_service.dart';
+import '../models/picked_location.dart';
+import 'dart:async';
 
 class EventCreateScreen extends StatefulWidget {
   final int currentStravaId;
@@ -32,7 +35,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
   String? _pace;
 
   // YENİ EKLENEN DEĞİŞKEN: Haritadan seçilen koordinat
-  LatLng? _pickedLocation;
+  PickedLocation? _pickedLocation;
 
   EventType _selectedType = EventType.socialRun;
   DateTime? _selectedDate;
@@ -99,7 +102,7 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
 
   // YENİ EKLENEN FONKSİYON: Harita ekranını açar ve sonucu bekler
   Future<void> _openMapPicker() async {
-    final LatLng? result = await Navigator.push(
+    final PickedLocation? result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const MapPickerScreen()),
     );
@@ -170,13 +173,13 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
         title: _title!,
         type: _selectedType,
         date: eventDateTime,
-        location: _location!,
+        location: _pickedLocation!.displayName,
         distance: _distance,
         pace: _pace,
         coverImageUrl: coverUrl,
         stravaId: widget.currentStravaId,
-        lat: _pickedLocation!.latitude,
-        lng: _pickedLocation!.longitude,
+        lat: _pickedLocation!.latLng.latitude,
+        lng: _pickedLocation!.latLng.longitude,
       );
 
       if (!mounted) return;
@@ -287,8 +290,10 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
                             Expanded(
                               child: Text(
                                 _pickedLocation != null
-                                    ? 'Konum Haritadan Seçildi'
+                                    ? _pickedLocation!.displayName
                                     : 'Haritadan Konum Seç (Zorunlu)',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   color:
                                       _pickedLocation != null
@@ -671,8 +676,18 @@ class MapPickerScreen extends StatefulWidget {
 
 class _MapPickerScreenState extends State<MapPickerScreen> {
   // Başlangıç noktasını doğrudan Yıldız / Beşiktaş bölgesine odaklıyoruz.
+  String? _selectedLocationName;
   final LatLng _initialCenter = const LatLng(41.0422, 29.0083);
   LatLng? _selectedMarker;
+  final MapController _mapController = MapController();
+
+  final NominatimService _nominatimService = NominatimService();
+
+  final TextEditingController _searchController = TextEditingController();
+
+  List<Map<String, dynamic>> _searchResults = [];
+
+  bool _isSearching = false;
 
   @override
   Widget build(BuildContext context) {
@@ -689,12 +704,21 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       body: Stack(
         children: [
           FlutterMap(
+            mapController: _mapController,
             options: MapOptions(
               initialCenter: _initialCenter,
               initialZoom: 14.0,
-              onTap: (tapPosition, point) {
+              onTap: (tapPosition, point) async {
+                final name = await _nominatimService.reverseGeocode(
+                  latitude: point.latitude,
+                  longitude: point.longitude,
+                );
+
+                if (!mounted) return;
+
                 setState(() {
                   _selectedMarker = point;
+                  _selectedLocationName = name ?? 'Seçilen Konum';
                 });
               },
             ),
@@ -725,28 +749,17 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             ],
           ),
 
-          // Ekranda yönlendirici bir bilgi mesajı
-          if (_selectedMarker == null)
-            Positioned(
-              top: 20,
-              left: 20,
-              right: 20,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.8),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Text(
-                  'Buluşma noktasını işaretlemek için haritada bir yere dokunun.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [_buildSearchBar(), _buildSearchResults()],
               ),
             ),
+          ),
 
           // Seçim yapıldıysa Onay Butonu çıkar
           if (_selectedMarker != null)
@@ -757,7 +770,13 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               child: ElevatedButton(
                 onPressed: () {
                   // Seçilen koordinatı bir önceki ekrana (forma) döndür
-                  Navigator.pop(context, _selectedMarker);
+                  Navigator.pop(
+                    context,
+                    PickedLocation(
+                      latLng: _selectedMarker!,
+                      displayName: _selectedLocationName ?? 'Seçilen Konum',
+                    ),
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.yrcSoftBlue,
@@ -779,6 +798,155 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Timer? _debounce;
+
+  Future<void> _searchLocation(String query) async {
+    // Eğer kullanıcı hızlıca yazmaya devam ediyorsa önceki API isteğini iptal et
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+
+    if (query.trim().isEmpty) {
+      setState(() {
+        _searchResults = [];
+      });
+      return;
+    }
+
+    // Kullanıcı yazmayı bıraktıktan 500 milisaniye sonra API'ye tek bir istek at
+    _debounce = Timer(const Duration(milliseconds: 500), () async {
+      setState(() {
+        _isSearching = true;
+      });
+
+      try {
+        final results = await _nominatimService.searchPlaces(query);
+
+        if (!mounted) return;
+
+        setState(() {
+          _searchResults = results;
+        });
+      } catch (e) {
+        // HATAYI KONSOLA YAZDIR: Artık işlemin nerede patladığını görebilirsin
+        debugPrint('Nominatim Arama Hatası: $e');
+
+        if (!mounted) return;
+
+        setState(() {
+          _searchResults = [];
+        });
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isSearching = false;
+          });
+        }
+      }
+    });
+  }
+
+  Widget _buildSearchBar() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8),
+        ],
+      ),
+      child: TextField(
+        controller: _searchController,
+        onChanged: _searchLocation,
+        style: const TextStyle(
+          color: Colors.black,
+        ), // EKLENEN SATIR: Yazı rengi siyah
+        decoration: InputDecoration(
+          hintText: 'Konum ara...',
+          hintStyle: TextStyle(
+            color: Colors.black.withOpacity(0.5),
+          ), // EKLENEN SATIR
+          prefixIcon: const Icon(
+            Icons.search,
+            color: Colors.black54,
+          ), // EKLENEN SATIR
+          suffixIcon:
+              _isSearching
+                  ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.black,
+                      ),
+                    ),
+                  )
+                  : null,
+          border: InputBorder.none,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchResults() {
+    if (_searchResults.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      constraints: const BoxConstraints(maxHeight: 250),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8),
+        ],
+      ),
+      child: ListView.builder(
+        shrinkWrap: true,
+        itemCount: _searchResults.length,
+        itemBuilder: (context, index) {
+          final result = _searchResults[index];
+
+          return ListTile(
+            leading: const Icon(
+              Icons.location_on,
+              color: Colors.redAccent,
+            ), // İkon rengini belirginleştirdik
+            title: Text(
+              result['display_name'] ?? '',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.w500,
+              ), // EKLENEN SATIR: Siyah yazı
+            ),
+            onTap: () {
+              final lat = double.tryParse(result['lat'] ?? '');
+              final lng = double.tryParse(result['lon'] ?? '');
+
+              if (lat == null || lng == null) return;
+
+              final target = LatLng(lat, lng);
+
+              _mapController.move(target, 16);
+
+              setState(() {
+                _selectedMarker = target;
+                _selectedLocationName = result['display_name'];
+                _searchResults = [];
+                _searchController.text = result['display_name'] ?? '';
+              });
+            },
+          );
+        },
       ),
     );
   }

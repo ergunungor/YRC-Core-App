@@ -48,6 +48,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   int _currentLevelThreshold = 0;
   int _nextLevelThreshold =
       100; // sıfıra bölünmeyi engellemek için güvenli varsayılan
+  String _currentLevelBadgeName = '';
 
   @override
   void initState() {
@@ -240,6 +241,16 @@ class _ProfileScreenState extends State<ProfileScreen>
           (nextThresholdData?['required_xp'] as num?)?.toInt() ??
           (currentThreshold + 1);
 
+      final badgeData =
+          await supabase
+              .from('level_badges')
+              .select('badge_name')
+              .eq('level', currentLevel)
+              .maybeSingle();
+      final String badgeName = badgeData?['badge_name'] as String? ?? '';
+
+      debugPrint('current_level: $currentLevel, badgeData: $badgeData');
+
       final int lastSeenLevel =
           (statsData['last_seen_level'] as num?)?.toInt() ?? 1;
 
@@ -249,6 +260,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           _currentLevel = currentLevel;
           _currentLevelThreshold = currentThreshold;
           _nextLevelThreshold = nextThreshold;
+          _currentLevelBadgeName = badgeName;
         });
 
         if (currentLevel > lastSeenLevel) {
@@ -810,7 +822,9 @@ class _ProfileScreenState extends State<ProfileScreen>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'LEVEL $_currentLevel',
+                _currentLevelBadgeName.isNotEmpty
+                    ? 'LEVEL $_currentLevel | $_currentLevelBadgeName'
+                    : 'LEVEL $_currentLevel',
                 style: TextStyle(
                   color: nikeVolt,
                   fontWeight: FontWeight.w900,

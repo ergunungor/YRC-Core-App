@@ -56,13 +56,14 @@ class _EventsScreenState extends State<EventsScreen> {
           }
 
           final events = snapshot.data ?? [];
+          final listItems = _buildDynamicEventList(events);
 
           return CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
               _buildSliverAppBar(context),
 
-              if (events.isEmpty)
+              if (listItems.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: _buildEmptyState(),
@@ -71,9 +72,7 @@ class _EventsScreenState extends State<EventsScreen> {
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
                   sliver: SliverList(
-                    delegate: SliverChildListDelegate(
-                      _buildDynamicEventList(events),
-                    ),
+                    delegate: SliverChildListDelegate(listItems),
                   ),
                 ),
             ],
@@ -86,6 +85,7 @@ class _EventsScreenState extends State<EventsScreen> {
   // --- SİLVER APP BAR ---
   SliverAppBar _buildSliverAppBar(BuildContext context) {
     return SliverAppBar(
+      toolbarHeight: 80,
       backgroundColor: bgColor.withValues(alpha: 0.7),
       pinned: true,
       elevation: 0,
@@ -240,8 +240,6 @@ class _EventsScreenState extends State<EventsScreen> {
       listItems.add(_buildEventCardFromData(eventData));
       listItems.add(const SizedBox(height: 32));
     }
-
-    if (listItems.isEmpty) return [_buildEmptyState()];
     return listItems;
   }
 
@@ -349,36 +347,38 @@ class _EventsScreenState extends State<EventsScreen> {
   }
 
   Widget _buildEmptyState() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 100, left: 24, right: 24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.calendar_today_rounded,
-            size: 80,
-            color: Colors.white.withValues(alpha: 0.1),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'Planlanmış Koşu Yok',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.calendar_today_rounded,
+              size: 80,
+              color: Colors.white.withValues(alpha: 0.1),
             ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Pacer\'larımız yeni rotalar hazırlıyor.\nAyakkabılarını hazırda tut!',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 15,
-              color: Colors.white.withValues(alpha: 0.5),
-              height: 1.5,
+            const SizedBox(height: 24),
+            const Text(
+              'Planlanmış Koşu Yok',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Text(
+              'Pacer\'larımız yeni rotalar hazırlıyor.\nAyakkabılarını hazırda tut!',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                color: Colors.white.withValues(alpha: 0.5),
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

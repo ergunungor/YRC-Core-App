@@ -137,7 +137,7 @@ class ArenaBountiesList extends StatelessWidget {
               return BountyCard(
                 title: b.title,
                 description: b.description,
-                points: "+${b.rewardXp} PTS",
+                points: "+${b.rewardXp} XP",
                 icon: _iconForBounty(b.title),
                 progress: b.progress,
               );

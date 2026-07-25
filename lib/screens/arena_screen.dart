@@ -208,10 +208,8 @@ class _ArenaScreenState extends State<ArenaScreen> {
         now.day,
       ).subtract(Duration(days: now.weekday - 1));
 
-      final definitions = await supabase
-          .from('bounty_definitions')
-          .select()
-          .eq('is_active', true);
+      final definitions =
+          await supabase.from('active_weekly_bounties').select();
 
       final completions = await supabase
           .from('user_bounty_completions')
