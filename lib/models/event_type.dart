@@ -2,7 +2,7 @@
 
 /// YRC Core Event Types.
 /// Supabase veritabanındaki CHECK constraint ile birebir eşleşmelidir.
-enum EventType { longRun, socialRun, interval, tempo, recovery, race }
+enum EventType { longRun, easyRun, interval, tempo, recovery, race }
 
 /// Enum'ı veritabanı formatına ve UI formatına çevirmek için extension yazıyoruz.
 /// Bu sayede 'EventType.longRun.dbValue' şeklinde temiz bir kullanım elde edeceğiz.
@@ -12,8 +12,8 @@ extension EventTypeExtension on EventType {
     switch (this) {
       case EventType.longRun:
         return 'LONG_RUN';
-      case EventType.socialRun:
-        return 'SOCIAL_RUN';
+      case EventType.easyRun:
+        return 'EASY RUN';
       case EventType.interval:
         return 'INTERVAL';
       case EventType.tempo:
@@ -30,8 +30,8 @@ extension EventTypeExtension on EventType {
     switch (this) {
       case EventType.longRun:
         return 'Long Run';
-      case EventType.socialRun:
-        return 'Social Run';
+      case EventType.easyRun:
+        return 'Easy Run';
       case EventType.interval:
         return 'Interval';
       case EventType.tempo:
@@ -55,7 +55,7 @@ class EventTypeHelper {
       case 'LONG_RUN':
         return EventType.longRun;
       case 'SOCIAL_RUN':
-        return EventType.socialRun;
+        return EventType.easyRun;
       case 'INTERVAL':
         return EventType.interval;
       case 'TEMPO':
@@ -66,7 +66,7 @@ class EventTypeHelper {
         return EventType.race;
       default:
         // Hatalı/Bozuk data durumunda uygulamayı crash etmek yerine default değer veriyoruz.
-        return EventType.socialRun;
+        return EventType.easyRun;
     }
   }
 

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'wrapped_share_screen.dart';
 import '../theme/app_theme.dart';
 import '../widgets/arena_widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -158,41 +157,20 @@ class _ArenaScreenState extends State<ArenaScreen> {
             _currentPodium = fetched;
             _isLoading = false;
           });
+        } else {
+          // YENİ: Bu hafta gerçekten kimse koşmamış — sahte veri göstermek yerine
+          // podyumu boş bırakıyoruz, _buildPodium() zaten doğru mesajı gösterecek.
+          if (mounted) {
+            setState(() {
+              _currentPodium = [];
+              _isLoading = false;
+            });
+          }
+          return;
         }
-        return;
       }
     } catch (e) {
       debugPrint('Supabase YRC Skor verisi çekilemedi: $e');
-    }
-
-    // --- FALLBACK / DEMO DATA ---
-    // Eğer o hafta hiç veri yoksa (veya internet koptuysa) şov devam etsin diye
-    if (mounted) {
-      await Future.delayed(const Duration(milliseconds: 400));
-      setState(() {
-        _currentPodium = [
-          ScoreRank(
-            rank: 1,
-            name: "Ergün",
-            score: 850,
-            avatarUrl: "https://i.pravatar.cc/150?u=1",
-            isKing: true,
-          ),
-          ScoreRank(
-            rank: 2,
-            name: "Zeynep",
-            score: 710,
-            avatarUrl: "https://i.pravatar.cc/150?u=2",
-          ),
-          ScoreRank(
-            rank: 3,
-            name: "Mehmet",
-            score: 640,
-            avatarUrl: "https://i.pravatar.cc/150?u=3",
-          ),
-        ];
-        _isLoading = false;
-      });
     }
   }
 
@@ -295,7 +273,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
                   child: ArenaBountiesList(bounties: _bounties),
                 ),
                 // --- YENİ EKLENEN KISIM BİTİŞİ ---
-                const SliverToBoxAdapter(child: SizedBox(height: 60)),
+                const SliverToBoxAdapter(child: SizedBox(height: 120)),
               ],
             ),
           ),
@@ -336,27 +314,6 @@ class _ArenaScreenState extends State<ArenaScreen> {
               ),
             ],
           ),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(12),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withAlpha(26)),
-            ),
-            child: IconButton(
-              icon: const Icon(
-                Icons.ios_share_rounded,
-                color: AppColors.yrcTextMain,
-              ),
-              onPressed:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const WrappedShareScreen(),
-                    ),
-                  ),
-              splashRadius: 24,
-            ),
-          ),
         ],
       ),
     ),
@@ -379,7 +336,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
           height: 250,
           child: Center(
             child: Text(
-              "Bu hafta henüz YRC skoru oluşmadı.",
+              "Bu hafta kimse koşmadı",
               style: TextStyle(
                 color: AppColors.yrcTextSec,
                 fontWeight: FontWeight.bold,
@@ -389,7 +346,6 @@ class _ArenaScreenState extends State<ArenaScreen> {
         ),
       );
     }
-
     ScoreRank? king = _currentPodium.isNotEmpty ? _currentPodium[0] : null;
     ScoreRank? second = _currentPodium.length > 1 ? _currentPodium[1] : null;
     ScoreRank? third = _currentPodium.length > 2 ? _currentPodium[2] : null;

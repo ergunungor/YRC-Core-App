@@ -35,9 +35,29 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Başvurular yüklenemedi: $e')));
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            backgroundColor: Colors.red.shade400,
+            content: const Row(
+              children: [
+                Icon(Icons.error_outline_rounded, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Başvurular yüklenirken bir sorun oluştu.',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
       }
     }
   }
@@ -52,9 +72,28 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       await _loadApplications();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Onaylanamadı: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            backgroundColor: Colors.red.shade400,
+            content: const Row(
+              children: [
+                Icon(Icons.error_outline_rounded, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Başvuru onaylanırken bir hata oluştu.',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _processingId = null);
@@ -68,9 +107,28 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       await _loadApplications();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Reddedilemedi: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            backgroundColor: Colors.red.shade400,
+            content: const Row(
+              children: [
+                Icon(Icons.cancel_outlined, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Başvuru reddedilirken bir hata oluştu.',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _processingId = null);

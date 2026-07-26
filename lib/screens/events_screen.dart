@@ -136,8 +136,25 @@ class _EventsScreenState extends State<EventsScreen> {
 
                 if (stravaId == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Kullanıcı bilgisi bulunamadı.'),
+                    SnackBar(
+                      behavior: SnackBarBehavior.floating,
+                      margin: const EdgeInsets.all(16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      backgroundColor: Colors.orange.shade700,
+                      content: const Row(
+                        children: [
+                          Icon(Icons.person_off_outlined, color: Colors.white),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Kullanıcı bilgisi bulunamadı.',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                   return;
@@ -157,9 +174,27 @@ class _EventsScreenState extends State<EventsScreen> {
 
                 if (role != 'pacer' && role != 'admin') {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Etkinlik oluşturmak için Pacer rütbesine sahip olmalısınız.',
+                    SnackBar(
+                      behavior: SnackBarBehavior.floating,
+                      margin: const EdgeInsets.all(16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      backgroundColor: Colors.orange.shade700,
+                      content: const Row(
+                        children: [
+                          Icon(
+                            Icons.workspace_premium_outlined,
+                            color: Colors.white,
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Etkinlik oluşturmak için Pacer rütbesine sahip olmalısınız.',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -187,27 +222,7 @@ class _EventsScreenState extends State<EventsScreen> {
           ),
         ],
       ),
-      actions: [
-        Container(
-          margin: const EdgeInsets.only(right: 20),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.2),
-              width: 0.5,
-            ),
-          ),
-          child: IconButton(
-            icon: const Icon(
-              Icons.filter_list_rounded,
-              color: Colors.white,
-              size: 22,
-            ),
-            onPressed: () => HapticFeedback.lightImpact(),
-          ),
-        ),
-      ],
+      actions: const [],
     );
   }
 
@@ -245,7 +260,7 @@ class _EventsScreenState extends State<EventsScreen> {
 
   // --- VERİDEN KART OLUŞTURMA (DÜZELTİLDİ) ---
   Widget _buildEventCardFromData(Map<String, dynamic> eventData) {
-    DateTime date = DateTime.parse(eventData['date']);
+    DateTime date = DateTime.parse(eventData['date']).toLocal();
     EventType type = EventTypeHelper.fromDbValue(eventData['type']);
     final String eventId = eventData['id'];
 
@@ -254,7 +269,7 @@ class _EventsScreenState extends State<EventsScreen> {
       case EventType.longRun:
         badgeColor = const Color(0xFF4C9EEB);
         break;
-      case EventType.socialRun:
+      case EventType.easyRun:
         badgeColor = const Color(0xFF34C759);
         break;
       case EventType.interval:
@@ -300,7 +315,26 @@ class _EventsScreenState extends State<EventsScreen> {
           onJoinTap: () async {
             if (_currentStravaId == null) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Kullanıcı bilgisi yüklenemedi.')),
+                SnackBar(
+                  behavior: SnackBarBehavior.floating,
+                  margin: const EdgeInsets.all(16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  backgroundColor: Colors.orange.shade700,
+                  content: const Row(
+                    children: [
+                      Icon(Icons.person_search_outlined, color: Colors.white),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Kullanıcı bilgisi yüklenemedi.',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               );
               return;
             }
@@ -319,7 +353,24 @@ class _EventsScreenState extends State<EventsScreen> {
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Hata: $e'),
+                    behavior: SnackBarBehavior.floating,
+                    margin: const EdgeInsets.all(16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    backgroundColor: Colors.red.shade400,
+                    content: const Row(
+                      children: [
+                        Icon(Icons.error_outline_rounded, color: Colors.white),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'İşlem sırasında bir hata oluştu.',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
                     duration: const Duration(seconds: 4),
                   ),
                 );

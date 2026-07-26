@@ -50,6 +50,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       100; // sıfıra bölünmeyi engellemek için güvenli varsayılan
   String _currentLevelBadgeName = '';
 
+  double _weeklyYrcKm = 0;
+  int _totalYrcParticipation = 0;
+
   @override
   void initState() {
     super.initState();
@@ -101,9 +104,28 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
       _myStravaId = userData['strava_id'];
 
+      final yrcStats =
+          await supabase
+              .from('yrc_leaderboard_ranked')
+              .select('runs_count')
+              .eq('strava_id', myStravaId)
+              .maybeSingle();
+
+      final weeklyYrcStats =
+          await supabase
+              .from('yrc_weekly_stats')
+              .select('weekly_distance_km')
+              .eq('strava_id', myStravaId)
+              .maybeSingle();
+
       // Eğer veritabanında weekly_goal varsa onu al, yoksa 15.0 kullan
       if (mounted) {
         setState(() {
+          _weeklyYrcKm =
+              (weeklyYrcStats?['weekly_distance_km'] as num?)?.toDouble() ?? 0;
+
+          _totalYrcParticipation =
+              (yrcStats?['runs_count'] as num?)?.toInt() ?? 0;
           _weeklyGoal =
               double.tryParse(userData['weekly_goal']?.toString() ?? '15') ??
               15.0;
@@ -482,14 +504,52 @@ class _ProfileScreenState extends State<ProfileScreen>
           _isApplyingForPacer = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Pacer başvurun alındı! 🎉')),
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            backgroundColor: const Color(0xFF34C759),
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle_outline_rounded, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Pacer başvurunuz başarıyla alındı.',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isApplyingForPacer = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            backgroundColor: Colors.red.shade400,
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    e.toString().replaceFirst('Exception: ', ''),
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       }
     }
@@ -501,9 +561,24 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Veriler başarıyla güncellendi!'),
-          backgroundColor: stravaOrange,
           behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          backgroundColor: stravaOrange,
+          content: const Row(
+            children: [
+              Icon(Icons.sync_alt_rounded, color: Colors.white),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Veriler başarıyla güncellendi.',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -721,29 +796,22 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     // Bekleyen bir başvurusu varsa durum göster
     if (_pacerApplicationStatus == 'pending') {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-        decoration: BoxDecoration(
-          color: Colors.white.withAlpha(15),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withAlpha(30)),
-        ),
+      return Center(
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.hourglass_top_rounded,
-              color: Colors.white70,
-              size: 18,
+              color: Colors.white.withValues(alpha: 0.35),
+              size: 14,
             ),
-            const SizedBox(width: 8),
-            const Text(
+            const SizedBox(width: 6),
+            Text(
               'Pacer Başvurun İnceleniyor',
               style: TextStyle(
-                color: Colors.white70,
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
+                color: Colors.white.withValues(alpha: 0.35),
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
               ),
             ),
           ],
@@ -751,38 +819,30 @@ class _ProfileScreenState extends State<ProfileScreen>
       );
     }
 
-    // Başvuru yok veya reddedilmiş: başvuru butonu göster
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
+    /// Başvuru yok veya reddedilmiş: küçük, göze batmayan bir link
+    return Center(
+      child: TextButton(
         onPressed: _isApplyingForPacer ? null : _applyForPacer,
-        icon:
+        child:
             _isApplyingForPacer
                 ? const SizedBox(
-                  width: 16,
-                  height: 16,
+                  width: 14,
+                  height: 14,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.black,
+                    color: Colors.white54,
                   ),
                 )
-                : const Icon(Icons.emoji_events_rounded, color: Colors.black),
-        label: Text(
-          _pacerApplicationStatus == 'rejected'
-              ? 'Tekrar Pacer\'lığa Başvur'
-              : 'Pacer mısın? Tıkla ve hemen hesabını onaylat!',
-          style: const TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: nikeVolt,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
+                : Text(
+                  _pacerApplicationStatus == 'rejected'
+                      ? 'Tekrar Pacer\'lığa Başvur'
+                      : 'Pacer mısın? Başvur',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.35),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
       ),
     );
   }
@@ -930,8 +990,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
           const SizedBox(height: 16),
           _buildXpBar(),
-          const SizedBox(height: 16),
-          _buildPacerApplicationSection(),
           const SizedBox(height: 24),
           Center(
             child: SizedBox(
@@ -1021,7 +1079,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               const SizedBox(width: 16),
               StatCard(
                 title: 'BU HAFTA (YRC İLE)',
-                value: 'Yakında',
+                value: '${_weeklyYrcKm.toStringAsFixed(1)} km',
                 icon: Icons.groups_rounded,
                 color: stravaOrange,
               ),
@@ -1046,12 +1104,14 @@ class _ProfileScreenState extends State<ProfileScreen>
             ],
           ),
           const SizedBox(height: 16),
-          const WideStatCard(
+          WideStatCard(
             title: 'YRC ETKİNLİK KATILIMI',
-            value: 'Çok Yakında',
+            value: '$_totalYrcParticipation',
             icon: Icons.local_activity_rounded,
             color: Colors.purpleAccent,
           ),
+          const SizedBox(height: 16),
+          _buildPacerApplicationSection(),
           const SizedBox(height: 32),
 
           Center(

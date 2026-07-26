@@ -11,6 +11,8 @@ import '../theme/app_theme.dart';
 import '../services/nominatim_service.dart';
 import '../models/picked_location.dart';
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import '../services/web_image_picker.dart';
 
 class EventCreateScreen extends StatefulWidget {
   final int currentStravaId;
@@ -30,34 +32,16 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
   String? _coverImageExtension;
 
   String? _title;
-  String? _location;
   String? _distance;
+  String? _location;
   String? _pace;
 
   // YENİ EKLENEN DEĞİŞKEN: Haritadan seçilen koordinat
   PickedLocation? _pickedLocation;
 
-  EventType _selectedType = EventType.socialRun;
+  EventType _selectedType = EventType.easyRun;
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
-
-  // --- Yardımcı Fonksiyonlar (Helpers) ---
-
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 80,
-    );
-
-    if (pickedFile != null) {
-      final bytes = await pickedFile.readAsBytes();
-      setState(() {
-        _coverImage = bytes;
-        _coverImageExtension = pickedFile.path.split('.').last;
-      });
-    }
-  }
 
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
@@ -116,11 +100,22 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
 
   void _showError(String message) {
     if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message, style: const TextStyle(color: Colors.white)),
-        backgroundColor: Colors.redAccent,
         behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: Colors.red.shade400,
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline_rounded, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(message, style: const TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -185,10 +180,25 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('🔥 Etkinlik başarıyla oluşturuldu!'),
-          backgroundColor: Color(0xFF34C759),
+        SnackBar(
           behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          backgroundColor: const Color(0xFF34C759),
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle_outline_rounded, color: Colors.white),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Etkinlik başarıyla oluşturuldu.',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
         ),
       );
 
@@ -434,81 +444,137 @@ class _EventCreateScreenState extends State<EventCreateScreen> {
     );
   }
 
+  Future<void> _pickImageMobile() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
+
+    if (pickedFile != null) {
+      final bytes = await pickedFile.readAsBytes();
+
+      setState(() {
+        _coverImage = bytes;
+
+        final name = pickedFile.name.toLowerCase();
+
+        if (name.endsWith('.png')) {
+          _coverImageExtension = 'png';
+        } else if (name.endsWith('.webp')) {
+          _coverImageExtension = 'webp';
+        } else {
+          _coverImageExtension = 'jpg';
+        }
+      });
+    }
+  }
+
   Widget _buildImagePicker() {
-    return GestureDetector(
-      onTap: _pickImage,
-      child: Container(
-        height: 220,
-        margin: const EdgeInsets.symmetric(horizontal: 20),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color:
-                _coverImage != null
-                    ? AppColors.yrcSoftBlue
-                    : Colors.white.withValues(alpha: 0.1),
-            width: 1.5,
-          ),
-          image:
-              _coverImage != null
-                  ? DecorationImage(
-                    image: MemoryImage(_coverImage!),
-                    fit: BoxFit.cover,
-                  )
-                  : null,
-        ),
-        child:
-            _coverImage == null
-                ? Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.add_a_photo_rounded,
-                        size: 32,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Kapak Fotoğrafı Seç',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                )
-                : Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(24),
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.7),
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                  alignment: Alignment.bottomCenter,
-                  padding: const EdgeInsets.all(16),
-                  child: const Text(
-                    'Değiştirmek için dokun',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+    return Stack(
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: kIsWeb ? null : _pickImageMobile,
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              width: double.infinity,
+              height: 220,
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color:
+                      _coverImage != null
+                          ? AppColors.yrcSoftBlue
+                          : Colors.white.withValues(alpha: 0.1),
+                  width: 1.5,
                 ),
-      ),
+                image:
+                    _coverImage != null
+                        ? DecorationImage(
+                          image: MemoryImage(_coverImage!),
+                          fit: BoxFit.cover,
+                        )
+                        : null,
+              ),
+              child:
+                  _coverImage == null
+                      ? Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.add_a_photo_rounded,
+                              size: 32,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Kapak Fotoğrafı Seç',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      )
+                      : Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(24),
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.7),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                        alignment: Alignment.bottomCenter,
+                        padding: const EdgeInsets.all(16),
+                        child: const Text(
+                          'Değiştirmek için dokun',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+            ),
+          ),
+        ),
+        if (kIsWeb)
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: WebFilePickerOverlay(
+                onFileSelected: (bytes, fileName) {
+                  setState(() {
+                    _coverImage = bytes;
+                    final name = fileName.toLowerCase();
+                    if (name.endsWith('.png')) {
+                      _coverImageExtension = 'png';
+                    } else if (name.endsWith('.webp')) {
+                      _coverImageExtension = 'webp';
+                    } else {
+                      _coverImageExtension = 'jpg';
+                    }
+                  });
+                },
+              ),
+            ),
+          ),
+      ],
     );
   }
 
