@@ -33,6 +33,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   int _totalParticipants = 0;
   double _totalClubDistance = 0.0;
+  DateTime _weekStart = _calculateWeekStart();
+
+  static DateTime _calculateWeekStart() {
+    final now = DateTime.now();
+    return DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
+  }
 
   @override
   void initState() {
@@ -42,6 +52,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   Future<void> _fetchLeaderboardData() async {
     if (!mounted) return;
+
+    // Hafta başlangıcını güncelle (haftalık yenilenme kontrolü için)
+    _weekStart = _calculateWeekStart();
+
     setState(() => _currentState = LeaderboardState.loading);
 
     try {
@@ -353,6 +367,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               const SizedBox(height: 16),
               _buildModernSegmentedControl(),
               const SizedBox(height: 8),
+              _buildWeekIndicator(),
+              const SizedBox(height: 8),
               Expanded(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 250),
@@ -432,6 +448,51 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildWeekIndicator() {
+    final weekEnd = _weekStart.add(const Duration(days: 6));
+    final now = DateTime.now();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Hafta: ${_weekStart.day}/${_weekStart.month} - ${weekEnd.day}/${weekEnd.month}',
+            style: TextStyle(
+              color: Colors.white.withAlpha((0.5 * 255).round()),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (now.isAfter(weekEnd))
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: neonBlue.withAlpha((0.2 * 255).round()),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.refresh_rounded, color: neonBlue, size: 12),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Yeni hafta başladı',
+                    style: TextStyle(
+                      color: neonBlue,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
