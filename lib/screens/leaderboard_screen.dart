@@ -456,18 +456,37 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     final weekEnd = _weekStart.add(const Duration(days: 6));
     final now = DateTime.now();
 
+    final tabName =
+        _activeTab == LeaderboardTab.totalWeekly
+            ? 'TÜM KOŞULAR'
+            : 'YRC ETKİNLİKLERİ';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'Hafta: ${_weekStart.day}/${_weekStart.month} - ${weekEnd.day}/${weekEnd.month}',
-            style: TextStyle(
-              color: Colors.white.withAlpha((0.5 * 255).round()),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                tabName,
+                style: TextStyle(
+                  color: Colors.white.withAlpha((0.4 * 255).round()),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Hafta: ${_weekStart.day}/${_weekStart.month} - ${weekEnd.day}/${weekEnd.month}',
+                style: TextStyle(
+                  color: Colors.white.withAlpha((0.5 * 255).round()),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
           if (now.isAfter(weekEnd))
             Container(
