@@ -157,16 +157,14 @@ class _ArenaScreenState extends State<ArenaScreen> {
             _currentPodium = fetched;
             _isLoading = false;
           });
-        } else {
-          // YENİ: Bu hafta gerçekten kimse koşmamış — sahte veri göstermek yerine
-          // podyumu boş bırakıyoruz, _buildPodium() zaten doğru mesajı gösterecek.
-          if (mounted) {
-            setState(() {
-              _currentPodium = [];
-              _isLoading = false;
-            });
-          }
-          return;
+        }
+      } else {
+        // BUG FIX: Bu hafta kimse koşmamış — podyumu boş bırakıyoruz
+        if (mounted) {
+          setState(() {
+            _currentPodium = [];
+            _isLoading = false;
+          });
         }
       }
     } catch (e) {
