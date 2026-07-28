@@ -2,5 +2,6 @@
     "deno.enable": true,
     "deno.enablePaths": [
         "./supabase"
-    ]
+    ],
+    "cmake.sourceDirectory": "/Users/ergunungor/StudioProjects/YRC_Core_App/linux"
 }

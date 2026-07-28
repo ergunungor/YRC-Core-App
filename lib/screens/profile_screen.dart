@@ -106,8 +106,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       final yrcStats =
           await supabase
-              .from('yrc_leaderboard_ranked')
-              .select('runs_count')
+              .from('yrc_participation_alltime')
+              .select('total_runs_count')
               .eq('strava_id', myStravaId)
               .maybeSingle();
 
@@ -125,7 +125,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               (weeklyYrcStats?['weekly_distance_km'] as num?)?.toDouble() ?? 0;
 
           _totalYrcParticipation =
-              (yrcStats?['runs_count'] as num?)?.toInt() ?? 0;
+              (yrcStats?['total_runs_count'] as num?)?.toInt() ?? 0;
           _weeklyGoal =
               double.tryParse(userData['weekly_goal']?.toString() ?? '15') ??
               15.0;
@@ -1118,8 +1118,11 @@ class _ProfileScreenState extends State<ProfileScreen>
             child: TextButton.icon(
               onPressed: () async {
                 try {
-                  // 1. Supabase üzerinden oturumu tamamen kapat
-                  await Supabase.instance.client.auth.signOut();
+                  // 1. Gerçek oturum bilgimiz (Strava ID) SharedPreferences'ta —
+                  // Supabase'in kendi Auth sistemini kullanmıyoruz, o yüzden
+                  // asıl silmemiz gereken şey bu.
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.remove('current_strava_id');
 
                   if (!mounted) return;
                   // 2. Kullanıcıyı Giriş (Auth) ekranına fırlat ve geri dönmesini engelle
