@@ -206,15 +206,25 @@ class _ProfileScreenState extends State<ProfileScreen>
       final userData =
           await supabase
               .from('users')
-              .select('strava_id, access_token')
+              .select(
+                'strava_id, access_token, refresh_token, token_expires_at',
+              )
               .eq('strava_id', myStravaId)
               .maybeSingle();
 
       if (userData != null &&
           userData['strava_id'] != null &&
-          userData['access_token'] != null) {
+          userData['access_token'] != null &&
+          userData['refresh_token'] != null) {
+        final validAccessToken = await StravaService().ensureValidAccessToken(
+          stravaId: userData['strava_id'],
+          accessToken: userData['access_token'],
+          refreshToken: userData['refresh_token'],
+          tokenExpiresAt: userData['token_expires_at'],
+        );
+
         await StravaService().syncRecentActivities(
-          userData['access_token'],
+          validAccessToken,
           userData['strava_id'],
         );
         await EventRepository().runEventBasedVerification(

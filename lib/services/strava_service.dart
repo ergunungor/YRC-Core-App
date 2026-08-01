@@ -7,6 +7,62 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class StravaService {
   final _supabase = Supabase.instance.client;
 
+  // --- YENİ: TOKEN SÜRESİ KONTROLÜ VE OTOMATİK YENİLEME ---
+  Future<String> ensureValidAccessToken({
+    required int stravaId,
+    required String accessToken,
+    required String refreshToken,
+    required int? tokenExpiresAt,
+  }) async {
+    final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    const bufferSeconds = 300; // 5 dakika güvenlik payı
+
+    final bool needsRefresh =
+        tokenExpiresAt == null ||
+        nowSeconds >= (tokenExpiresAt - bufferSeconds);
+
+    if (!needsRefresh) {
+      return accessToken;
+    }
+
+    try {
+      print('⏳ Strava token süresi dolmuş/dolmak üzere, yenileniyor...');
+
+      final response = await _supabase.functions.invoke(
+        'strava-refresh',
+        body: {'refresh_token': refreshToken},
+      );
+
+      final data = response.data;
+
+      if (data == null ||
+          data['error'] != null ||
+          data['access_token'] == null) {
+        print('🚨 Token yenilenemedi: ${data?['error']}');
+        return accessToken;
+      }
+
+      final newAccessToken = data['access_token'] as String;
+      final newRefreshToken = data['refresh_token'] as String;
+      final newExpiresAt = data['expires_at'] as int;
+
+      await _supabase
+          .from('users')
+          .update({
+            'access_token': newAccessToken,
+            'refresh_token': newRefreshToken,
+            'token_expires_at': newExpiresAt,
+          })
+          .eq('strava_id', stravaId);
+
+      print('✅ Strava token başarıyla yenilendi.');
+      return newAccessToken;
+    } catch (e) {
+      print('🚨 Token yenileme sırasında hata: $e');
+      return accessToken;
+    }
+  }
+
   // --- ANA SENKRONİZASYON FONKSİYONU ---
   Future<void> syncRecentActivities(String accessToken, int stravaId) async {
     print('Senkronizasyon başlıyor...');

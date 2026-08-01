@@ -85,6 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
           'profile_url': athleteData['profile'],
           'access_token': accessToken,
           'refresh_token': refreshToken,
+          'token_expires_at': data['expires_at'],
         });
 
         final prefs = await SharedPreferences.getInstance();
